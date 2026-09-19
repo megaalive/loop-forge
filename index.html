@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.5.4 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.5.5 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.5.4 — transport UI/state audit ===== */
+/* ===== LOOPFORGE-16 v4.5.5 — visible playhead and transport position ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -129,6 +129,8 @@ button{cursor:pointer}
 .section-label{font-weight:700;color:var(--text-faint);font-size:11px;margin-right:1px}
 .patternbtn{min-width:32px;padding:6px 9px}
 .patternbtn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.transport-pos{min-width:68px;padding:5px 8px;border:1px solid var(--border-soft);border-radius:var(--radius-sm);color:var(--text-dim);font:10px var(--mono);text-align:center;background:var(--surface-2)}
+.seq-head .step-index.playing{color:var(--accent-2);background:var(--accent-2-soft);border-radius:4px}
 
 /* ---------- sequencer grid (hero element) ---------- */
 .sequence-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2);box-shadow:inset 0 1px 0 rgba(255,255,255,.02)}
@@ -322,6 +324,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
         <button class="btn patternbtn" data-pattern="B">B</button>
         <button class="btn patternbtn" data-pattern="C">C</button>
         <button class="btn patternbtn" data-pattern="D">D</button>
+        <span id="transportPos" class="transport-pos">A · --/16</span>
         <button id="playAllBtn" class="btn" title="Play A, B, C, D in order and loop">Play all</button>
         <button id="copyPattern" class="btn advanced-only">Copy → next</button>
         <button id="pianoToggle" class="btn advanced-only">Notes</button>
@@ -679,11 +682,16 @@ function playAllParts(){
   if(isPlaying||isStarting)stop();
   $('#chain').value='A B C D';songMode=true;chainPos=0;currentStep=0;switchPattern('A');play()
 }
+function updateTransportPosition(step=lastPlayStep){
+  const el=$('#transportPos');if(!el)return;
+  el.textContent=currentPattern+' · '+(step>=0?String(step+1).padStart(2,'0'):'--')+'/16'
+}
 function paintPlayhead(step){
   const prev=lastPlayStep;
-  if(prev>=0)$$(`.step[data-step="${prev}"],.piano-cell[data-step="${prev}"]`).forEach(x=>x.classList.remove('playing'));
+  if(prev>=0)$(`.step[data-step="${prev}"],.piano-cell[data-step="${prev}"],.step-index[data-step="${prev}"]`).forEach(x=>x.classList.remove('playing'));
   lastPlayStep=step;
-  if(step>=0)$$(`.step[data-step="${step}"],.piano-cell[data-step="${step}"]`).forEach(x=>x.classList.add('playing'))
+  if(step>=0)$(`.step[data-step="${step}"],.piano-cell[data-step="${step}"],.step-index[data-step="${step}"]`).forEach(x=>x.classList.add('playing'));
+  updateTransportPosition(step)
 }
 
 function migrateTrack(tr,i){const d=trackTemplate(i),hadEvents=Array.isArray(tr.noteEvents);for(const k of Object.keys(d))if(tr[k]===undefined)tr[k]=cloneData(d[k]);if(!tr.role)tr.role=defaultRoles[i];tr.locked=!!tr.locked;tr.steps=(tr.steps||[]).slice(0,STEPS);while(tr.steps.length<STEPS)tr.steps.push(stepTemplate());tr.steps=tr.steps.map(st=>({v:st.v||0,p:st.p??1,shift:st.shift||0,n:st.n??null,slice:st.slice||0}));tr.noteEvents=(tr.noteEvents||[]).map(n=>noteEvent(n.pitch??n.n??tr.note,n.start??0,n.length??1,n.velocity??n.v??2,n.p??1,n.shift??0)).filter(n=>n.start<STEPS);if(isPitchedTrack(tr)&&!hadEvents)tr.noteEvents=tr.steps.flatMap((st,k)=>st.v?[noteEvent(st.n??tr.note,k,1,st.v,st.p,st.shift)]:[]);return tr}
@@ -702,7 +710,7 @@ function renderInlinePiano(tr,i){
 function beginNoteGesture(e,i,pitch,step){if(e.button!==0)return;e.preventDefault();selectedTrack=i;selectedStep=step;const tr=tracks()[i],existing=noteCovering(tr,pitch,step),origin=step;const finish=up=>{document.removeEventListener('pointerup',finish);const el=document.elementFromPoint(up.clientX,up.clientY)?.closest?.('.piano-cell[data-track][data-pitch][data-step]');let end=origin;if(el&&+el.dataset.track===i&&+el.dataset.pitch===pitch)end=+el.dataset.step;checkpoint();if(existing){if(end===origin)removeNote(tr,existing);else existing.length=clamp(end-existing.start+1,1,STEPS-existing.start)}else{const start=Math.min(origin,end),length=Math.abs(end-origin)+1;addNote(tr,pitch,start,length,2,1,0)}renderAll()};document.addEventListener('pointerup',finish,{once:true})}
 
 function renderSeq(){
-  const root=$('#seq');root.innerHTML='';const head=document.createElement('div');head.className='seq-head';head.innerHTML='<div>SOUND</div>'+Array.from({length:16},(_,i)=>'<div style="text-align:center">'+(i+1)+'</div>').join('');root.appendChild(head);
+  const root=$('#seq');root.innerHTML='';const head=document.createElement('div');head.className='seq-head';head.innerHTML='<div>SOUND</div>'+Array.from({length:16},(_,i)=>'<div class="step-index" data-step="'+i+'" style="text-align:center">'+(i+1)+'</div>').join('');root.appendChild(head);
   tracks().forEach((tr,i)=>{const row=document.createElement('div');row.className='track'+(i===selectedTrack?' selected':'');row.classList.toggle('locked',!!tr.locked);const lab=document.createElement('div');lab.className='tracklabel';const noteButton=isPitchedTrack(tr)?'<button class="mini pitch-toggle '+(expandedTracks.has(i)?'on':'')+'" data-act="notes" title="'+(expandedTracks.has(i)?'Hide':'Show')+' notes" aria-label="'+(expandedTracks.has(i)?'Hide':'Show')+' notes for '+escHtml(tr.name)+'">♪</button>':'';lab.innerHTML='<span class="tracknum">'+String(i+1).padStart(2,'0')+'</span><span class="trackname">'+escHtml(tr.name)+'</span><span class="trackrole">'+escHtml(tr.role||'')+'</span><span class="simple-track-actions">'+noteButton+'<button class="mini lock '+(tr.locked?'on':'')+'" data-act="lock" title="Lock this row">L</button><button class="mini '+(tr.mute?'on':'')+'" data-act="mute" title="Mute this row">M</button><button class="mini warn '+(tr.solo?'on':'')+'" data-act="solo" title="Hear only this row">S</button></span>';lab.addEventListener('click',e=>{if(e.target.dataset.act==='notes'){toggleTrackNotes(i);return}if(e.target.dataset.act==='lock'){checkpoint();tr.locked=!tr.locked;renderAll();return}if(e.target.dataset.act==='mute'){checkpoint();tr.mute=!tr.mute;renderAll();return}if(e.target.dataset.act==='solo'||e.shiftKey){checkpoint();tr.solo=!tr.solo;renderAll();return}selectedTrack=i;syncSoundPanel();syncStepPanel();renderAll()});row.appendChild(lab);
     for(let k=0;k<STEPS;k++){const st=tr.steps[k],starts=isPitchedTrack(tr)?notesAtStart(tr,k):[],v=isPitchedTrack(tr)?(starts.length?Math.max(...starts.map(n=>n.velocity)):0):st.v,b=document.createElement('button');b.className='step '+(v?'v'+v:'')+(i===selectedTrack&&k===selectedStep?' selected-step':'');b.dataset.step=k;b.dataset.prob=!isPitchedTrack(tr)&&st.p<1?Math.round(st.p*100)+'%':'';b.dataset.extra=isPitchedTrack(tr)?(starts.length>1?'×'+starts.length:starts.length===1?noteName(starts[0].pitch):''):(tr.type==='sample'&&tr.sliceMode?'S'+(st.slice+1):(st.shift?((st.shift>0?'+':'')+st.shift):''));b.setAttribute('aria-label',tr.name+', beat '+(k+1)+', '+(v?'on':'off'));b.title=isPitchedTrack(tr)?tr.name+' · step '+(k+1)+' · open notes':tr.name+' · beat '+(k+1);b.addEventListener('click',e=>{selectedTrack=i;selectedStep=k;if(isPitchedTrack(tr)){expandedTracks.add(i);renderAll();return}checkpoint();if(e.shiftKey)st.v=st.v?((st.v%3)+1):1;else st.v=st.v?0:2;renderAll()});b.addEventListener('contextmenu',e=>{if(isPitchedTrack(tr))return;e.preventDefault();selectedTrack=i;selectedStep=k;checkpoint();st.p=({1:.75,.75:.5,.5:.25,.25:1})[st.p]||1;renderAll()});row.appendChild(b)}root.appendChild(row);if(expandedTracks.has(i)&&isPitchedTrack(tr))root.appendChild(renderInlinePiano(tr,i))
   });
@@ -783,7 +791,7 @@ function buildSong(){generateAllParts()}
 function renderAll(){renderSeq();renderMixer();syncSoundPanel();syncStepPanel();syncPianoToggle();renderPiano()}
 
 function parseChain(){const a=$('#chain').value.toUpperCase().match(/[ABCD]/g);return a&&a.length?a:['A']}
-function switchPattern(p,rerender=true){if(!state.patterns[p])return;currentPattern=p;$$('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));if(rerender)renderAll()}
+function switchPattern(p,rerender=true){if(!state.patterns[p])return;currentPattern=p;$('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));updateTransportPosition();if(rerender)renderAll()}
 async function loadSample(file){ensureAudio();const ab=await file.arrayBuffer();sampleBuffers[selectedTrack]=await ctx.decodeAudioData(ab.slice(0));checkpoint();tracks()[selectedTrack].type='sample';tracks()[selectedTrack].sliceMode=true;$('#soundType').value='sample';renderAll();toast(`Sample loaded: ${file.name}`)}
 
 function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
