@@ -107,6 +107,31 @@ details.morebox{border:1px solid var(--line);border-radius:10px;margin-top:10px;
 @media (max-width:900px){.main{grid-template-columns:1fr}.sidebar{border-top:1px solid var(--line)}.tabs{position:sticky;top:0}.welcome{grid-template-columns:1fr}.seq{min-width:980px}}
 @media (max-width:520px){html,body{font-size:14px}.topbar{padding:10px}.brand{width:auto;flex:1}.brand small{display:none}.transport{width:100%}#playBtn{flex:1}.workspace,.sidebar{padding:8px}.welcome-steps{display:grid;gap:4px}.patternbar{overflow:auto;flex-wrap:nowrap}.seq-head,.track{grid-template-columns:150px repeat(16,46px)}.seq{min-width:920px}.trackrole{display:none}.step{height:42px}.tabs .btn{padding:8px 7px;font-size:12px}}
 
+
+/* v4.1 — keep track names readable */
+.trackname{
+  min-width:0;
+  text-transform:capitalize;
+  letter-spacing:.01em;
+}
+body.easy .tracknum{display:none}
+body.easy .tracklabel{
+  gap:8px;
+}
+body.easy .simple-track-actions .lock,
+body.easy .simple-track-actions .warn{
+  display:none;
+}
+body.easy .simple-track-actions .mini{
+  min-width:30px;
+  padding:3px 5px;
+}
+@media (max-width:520px){
+  .seq-head,.track{grid-template-columns:180px repeat(16,46px)}
+  .seq{min-width:950px}
+  .trackname{font-size:14px}
+}
+
 </style>
 </head>
 <body>
