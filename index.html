@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.6.0 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.7.0 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.6.0 — audit fixes ===== */
+/* ===== LOOPFORGE-16 v4.7.0 — UX and feel ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -157,7 +157,7 @@ body.easy .tracklabel{gap:8px}
 .mini.lock.on{color:var(--accent-2);border-color:#2c6270;background:var(--accent-2-soft)}
 .mini.warn.on{color:var(--warn);border-color:#7a6530;background:var(--warn-soft)}
 
-.step{height:28px;border:1px solid var(--border-soft);background:var(--step-0);border-radius:6px;position:relative;color:var(--text-faint);padding:0}
+.step{height:28px;border:1px solid var(--border-soft);background:var(--step-0);border-radius:6px;position:relative;color:var(--text-faint);padding:0;touch-action:none;user-select:none;-webkit-user-select:none}
 .step:nth-of-type(4n+1){background:var(--step-0-alt)}
 .step:hover{border-color:var(--border-strong)}
 .step::after{content:attr(data-prob);position:absolute;right:2px;bottom:1px;font:8px var(--mono);color:inherit;opacity:.85}
@@ -512,7 +512,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.6.0', STEPS=16, TRACKS=16;
+const APP_VERSION='4.7.0', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -553,7 +553,23 @@ function noteName(n){return noteNames[((n%12)+12)%12]+(Math.floor(n/12)-1)}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.style.display='block';clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',2200)}
 function b64encode(str){return btoa(encodeURIComponent(str)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function b64decode(str){return decodeURIComponent(atob(str.replace(/-/g,'+').replace(/_/g,'/')))}
-function readHashProject(){const m=location.hash.match(/^#p=(.+)$/);if(!m)return null;try{return JSON.parse(b64decode(m[1]))}catch(_){return null}}
+function bytesToB64(bytes){let s='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function b64ToBytes(str){const b=atob(str.replace(/-/g,'+').replace(/_/g,'/'));const a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
+async function encodeProject(){
+  const json=JSON.stringify(projectData());
+  if(typeof CompressionStream!=='undefined'){
+    try{const stream=new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'));return 'z'+bytesToB64(new Uint8Array(await new Response(stream).arrayBuffer()))}catch(_){}
+  }
+  return 'p'+b64encode(json)
+}
+async function decodeProject(enc){
+  if(enc.charAt(0)==='z'){
+    const stream=new Blob([b64ToBytes(enc.slice(1))]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return JSON.parse(await new Response(stream).text())
+  }
+  return JSON.parse(b64decode(enc.slice(1)))
+}
+async function readHashProject(){const m=location.hash.match(/^#p=(.+)$/);if(!m)return null;try{return await decodeProject(m[1])}catch(_){return null}}
 function scheduleAutosave(){if(restoring)return;clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(projectData()));const s=$('#saveStatus');if(s){s.textContent='[SAVED]';clearTimeout(s._t);s._t=setTimeout(()=>{s.textContent='[AUTO]'},1200)}}catch(_){}},700)}
 function selectTab(name){$$('.sidepanel').forEach(p=>p.style.display='none');$$('.tab').forEach(x=>x.classList.remove('active'));const p=$('#'+name);if(p)p.style.display='block';const t=$$('.tab').find(x=>x.dataset.show===name);if(t)t.classList.add('active')}
 function setMode(easy){document.body.classList.toggle('easy',!!easy);const b=$('#moreBtn');if(b){b.classList.toggle('on',!easy);b.textContent=easy?'More':'Less'}}
@@ -1086,10 +1102,10 @@ async function loadSample(file){stopSoundPreview();const trackIndex=selectedTrac
 
 function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,echo:+$('#echo').value||0,duck:sidechain?1:0,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
 function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=cloneData(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#echo').value=p.echo??0;$('#echoVal').textContent=$('#echo').value+'%';setEcho((+$('#echo').value||0)/100);sidechain=!!p.duck;$('#scBtn').classList.toggle('primary',sidechain);$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
-function shareUrl(){const enc=b64encode(JSON.stringify(projectData()));const base=(location.origin&&location.origin!=='null')?location.origin+location.pathname:location.href.split('#')[0];return{enc,url:base+'#p='+enc}}
+async function shareUrl(){const enc=await encodeProject();const base=(location.origin&&location.origin!=='null')?location.origin+location.pathname:location.href.split('#')[0];return{enc,url:base+'#p='+enc}}
 async function shareLink(){
   try{
-    const {enc,url}=shareUrl();
+    const {enc,url}=await shareUrl();
     try{history.replaceState(null,'','#p='+enc)}catch(_){}
     let ok=false;
     if(navigator.clipboard&&navigator.clipboard.writeText){try{await navigator.clipboard.writeText(url);ok=true}catch(_){}}
@@ -1097,9 +1113,9 @@ async function shareLink(){
     toast(ok?'Share link copied to clipboard':'Share link is in the address bar')
   }catch(e){toast('Could not create link')}
 }
-function restoreInitialProject(){
-  const fromHash=readHashProject();
-  if(fromHash){try{restoring=true;applyProject(fromHash,false);toast('Loaded shared loop');return}catch(_){ }finally{restoring=false}}
+async function restoreInitialProject(){
+  const fromHash=await readHashProject();
+  if(fromHash){try{restoring=true;applyProject(fromHash,false);toast('Loaded shared loop')}catch(_){toast('Could not load shared loop')}finally{restoring=false}return}
   const saved=localStorage.getItem(LS_KEY);
   if(saved){try{restoring=true;applyProject(JSON.parse(saved),false);toast('Restored last session')}catch(_){ }finally{restoring=false}}
 }
@@ -1158,9 +1174,9 @@ function onMidiMessage(e){const [status,note,vel]=e.data,cmd=status&0xf0;if(cmd=
 async function performNote(note,velocity=.8){if(!await ensureAudio())return;const tr=tracks()[selectedTrack];if(tr.mute)return toast('This track is muted');syncTrackBuses();hit(ctx,tr,ctx.currentTime+.01,velocity,note,null,currentStepObj().slice||0,selectedTrack,tracks(),true,secondsPerStep());if(recordArm){if(tr.locked){toast('Track is locked; note not recorded');return}checkpoint('Record');const k=clamp(isPlaying?lastPlayStep:selectedStep,0,15),v=velocity>.82?3:velocity>.38?2:1;if(isPitchedTrack(tr)){addNote(tr,note,k,1,v);expandedTracks.add(selectedTrack)}else tr.steps[k].v=v;selectedStep=k;renderAll()}}
 const typingMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72};
 
-function init(){
+async function init(){
   setMode(localStorage.getItem(LS_MODE)!=='advanced');
-  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';migrateState();restoreInitialProject();bindSound();bindStepPanel();bindStepPop();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
+  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
   if(!navigator.requestMIDIAccess){$('#midiBtn').disabled=true;$('#midiBtn').textContent='MIDI n/a';$('#midiBtn').title='Web MIDI is not supported by this browser'}
   document.addEventListener('pointerdown',primeAudio,{once:true,passive:true});
   document.addEventListener('touchend',primeAudio,{once:true,passive:true});
@@ -1197,7 +1213,7 @@ function init(){
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}if(/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)||e.target.isContentEditable)return;if(e.code==='Space'){e.preventDefault();playCurrent();return}if(typingMode&&!e.ctrlKey&&!e.metaKey&&!e.repeat){const n=typingMap[e.key.toLowerCase()];if(n!=null){e.preventDefault();performNote(n,.82)}}});
   history.length=0;future.length=0;
 }
-init();
+init().catch(e=>console.error(e));
 })();
 </script>
 </body>
