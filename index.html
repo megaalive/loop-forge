@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.4 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.5 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.4 — polyphonic piano roll ===== */
+/* ===== LOOPFORGE-16 v4.5 — multi-part generation and playback ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -295,7 +295,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
       <button id="metroBtn" class="btn advanced-only">Metronome</button>
       <div class="field"><span class="hide-sm">BPM</span><input id="bpm" type="number" min="40" max="240" value="112"></div>
       <div class="field"><span class="hide-sm">SWING</span><input id="swing" type="range" min="0" max="70" value="18"><span id="swingVal">18%</span></div>
-      <button id="randomBtn" class="btn">New idea</button>
+      <button id="randomBtn" class="btn" title="Generate only the part you are viewing">New part</button>
       <button id="blankBtn" class="btn" title="Clear the current part and start empty">Blank loop</button>
       <button id="typingBtn" class="btn advanced-only">Keys</button>
       <button id="midiBtn" class="btn advanced-only">MIDI</button>
@@ -311,7 +311,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
   <main class="main">
     <section class="workspace">
       <div id="welcome" class="welcome">
-        <div><strong>Make something in three moves.</strong><div class="welcome-steps"><span>Tap squares</span><span>Press Play</span><span>Try New idea</span></div></div>
+        <div><strong>Make something in three moves.</strong><div class="welcome-steps"><span>Tap squares</span><span>Press Play</span><span>Try New part or Make A–D</span></div></div>
         <button id="hideWelcome" class="btn">Got it</button>
       </div>
       <div class="modehint"><b>Tip:</b> each row is one sound. Bright squares will play.</div>
@@ -321,10 +321,11 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
         <button class="btn patternbtn" data-pattern="B">B</button>
         <button class="btn patternbtn" data-pattern="C">C</button>
         <button class="btn patternbtn" data-pattern="D">D</button>
+        <button id="playAllBtn" class="btn" title="Play A, B, C, D in order and loop">Play all</button>
         <button id="copyPattern" class="btn advanced-only">Copy → next</button>
         <button id="pianoToggle" class="btn advanced-only">Notes</button>
-        <div class="field advanced-only" style="margin-left:auto"><span>Order</span><input id="chain" value="A A B A" style="width:110px"></div>
-        <button id="songMode" class="btn advanced-only">Song: off</button>
+        <div class="field advanced-only" style="margin-left:auto"><span>Order</span><input id="chain" value="A B C D" style="width:110px"></div>
+        <button id="songMode" class="btn advanced-only">Chain: off</button>
       </div>
       <div class="sequence-wrap">
         <div class="seq" id="seq"></div>
@@ -359,13 +360,16 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
               <label class="control">Key<select id="key"></select></label>
               <label class="control">Mood<select id="scale"><option>Minor</option><option>Major</option><option>Dorian</option><option>Phrygian</option><option>Pentatonic</option></select></label>
             </div>
-            <button id="generateIdea" class="btn primary big-action">Make a new loop</button>
+            <div class="grid2">
+              <button id="generateIdea" class="btn primary big-action">Make this part</button>
+              <button id="generateAll" class="btn big-action">Make A–D</button>
+            </div>
           </div>
           <details class="morebox advanced-only"><summary>Shape it with words</summary><div class="inside">
             <div class="genbox" style="border:0;padding:0;background:transparent">
               <label class="control">Describe the change<textarea id="genPrompt" rows="3" placeholder="dark sparse bass; keep the drums"></textarea></label>
               <div class="row" style="margin-top:8px"><label class="control">Change<select id="genTarget"><option value="selected">Selected track</option><option value="drums">Drums</option><option value="bass">Bass</option><option value="harmony">Harmony</option><option value="melody">Melody / arp</option><option value="texture">Texture / FX</option><option value="full">All unlocked tracks</option></select></label><label class="control">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label></div>
-              <div class="grid2"><button id="genApply" class="btn primary">Generate</button><button id="genVariation" class="btn">Variation → next</button><button id="genFill" class="btn">Fill gaps</button><button id="genSong" class="btn">Build A/B/C/D</button></div>
+              <div class="grid2"><button id="genApply" class="btn primary">Generate</button><button id="genVariation" class="btn">Variation → next</button><button id="genFill" class="btn">Fill gaps</button><button id="genSong" class="btn">Regenerate A–D</button></div>
               <div id="genResult" class="genresult">Changes stay editable. Locked tracks stay untouched.</div>
             </div>
           </div></details>
@@ -533,10 +537,17 @@ function scheduleStep(step,time){
   tracks().forEach((tr,i)=>{if(isPitchedTrack(tr)){notesAtStart(tr,step).forEach(n=>{if(Math.random()>n.p)return;const t=Math.max(ctx.currentTime+.001,base+(n.shift||0)/1000);hit(ctx,tr,t,noteVelocity(n.velocity),n.pitch,null,0,i,tracks(),false,n.length*secondsPerStep())});return}const st=tr.steps[step];if(!st.v||Math.random()>st.p)return;const t=Math.max(ctx.currentTime+.001,base+(st.shift||0)/1000);hit(ctx,tr,t,[0,.45,.72,1][st.v],resolvedNote(tr,i,st,step),null,st.slice||0,i,tracks())});
   setTimeout(()=>paintPlayhead(step),Math.max(0,(base-ctx.currentTime)*1000));
 }
-function schedulerTick(){while(nextNoteTime<ctx.currentTime+.12){scheduleStep(currentStep,nextNoteTime);nextNoteTime+=secondsPerStep();currentStep++;if(currentStep>=STEPS){currentStep=0;if(songMode){const c=parseChain();chainPos=(chainPos+1)%c.length;switchPattern(c[chainPos],false)}}}}
-function play(){ensureAudio();if(isPlaying)return;isPlaying=true;nextNoteTime=ctx.currentTime+.05;scheduler=setInterval(schedulerTick,25);$('#playBtn').textContent='Pause';toast('Playing')}
-function stop(){if(!isPlaying)return;isPlaying=false;clearInterval(scheduler);scheduler=null;currentStep=0;lastPlayStep=0;chainPos=0;paintPlayhead(-1);$('#playBtn').textContent='Play'}
-function paintPlayhead(step){lastPlayStep=step;$$('.step,.piano-cell').forEach(x=>x.classList.remove('playing'));if(step>=0){$$(`.step[data-step="${step}"]`).forEach(x=>x.classList.add('playing'));$$(`.piano-cell[data-step="${step}"]`).forEach(x=>x.classList.add('playing'))}}
+function schedulerTick(){while(nextNoteTime<ctx.currentTime+.12){scheduleStep(currentStep,nextNoteTime);nextNoteTime+=secondsPerStep();currentStep++;if(currentStep>=STEPS){currentStep=0;if(songMode){const c=parseChain();chainPos=(chainPos+1)%c.length;switchPattern(c[chainPos],true)}}}}
+function updatePlaybackButtons(){
+  $('#playBtn').textContent=isPlaying?'Pause':'Play';
+  const all=$('#playAllBtn');if(all){all.textContent=isPlaying&&songMode?'Playing A→D':'Play all';all.classList.toggle('primary',isPlaying&&songMode)}
+  const chain=$('#songMode');if(chain){chain.textContent='Chain: '+(songMode?'on':'off');chain.classList.toggle('primary',songMode)}
+}
+function play(){ensureAudio();if(isPlaying)return;isPlaying=true;nextNoteTime=ctx.currentTime+.05;scheduler=setInterval(schedulerTick,25);updatePlaybackButtons();toast(songMode?'Playing A → B → C → D':'Playing part '+currentPattern)}
+function stop(){if(isPlaying){isPlaying=false;clearInterval(scheduler);scheduler=null}currentStep=0;lastPlayStep=0;chainPos=0;paintPlayhead(-1);updatePlaybackButtons()}
+function playCurrent(){if(isPlaying){stop();return}songMode=false;chainPos=0;play()}
+function playAllParts(){if(isPlaying&&songMode){stop();songMode=false;updatePlaybackButtons();return}if(isPlaying)stop();$('#chain').value='A B C D';songMode=true;chainPos=0;currentStep=0;switchPattern('A');play()}
+function paintPlayheadfunction paintPlayhead(step){lastPlayStep=step;$$('.step,.piano-cell').forEach(x=>x.classList.remove('playing'));if(step>=0){$$(`.step[data-step="${step}"]`).forEach(x=>x.classList.add('playing'));$$(`.piano-cell[data-step="${step}"]`).forEach(x=>x.classList.add('playing'))}}
 
 function migrateTrack(tr,i){const d=trackTemplate(i),hadEvents=Array.isArray(tr.noteEvents);for(const k of Object.keys(d))if(tr[k]===undefined)tr[k]=structuredClone(d[k]);if(!tr.role)tr.role=defaultRoles[i];tr.locked=!!tr.locked;tr.steps=(tr.steps||[]).slice(0,STEPS);while(tr.steps.length<STEPS)tr.steps.push(stepTemplate());tr.steps=tr.steps.map(st=>({v:st.v||0,p:st.p??1,shift:st.shift||0,n:st.n??null,slice:st.slice||0}));tr.noteEvents=(tr.noteEvents||[]).map(n=>noteEvent(n.pitch??n.n??tr.note,n.start??0,n.length??1,n.velocity??n.v??2,n.p??1,n.shift??0)).filter(n=>n.start<STEPS);if(isPitchedTrack(tr)&&!hadEvents)tr.noteEvents=tr.steps.flatMap((st,k)=>st.v?[noteEvent(st.n??tr.note,k,1,st.v,st.p,st.shift)]:[]);return tr}
 function migrateState(){for(const p of ['A','B','C','D']){if(!state.patterns[p])state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i));state.patterns[p]=state.patterns[p].slice(0,TRACKS);while(state.patterns[p].length<TRACKS)state.patterns[p].push(trackTemplate(state.patterns[p].length));state.patterns[p]=state.patterns[p].map(migrateTrack)}}
@@ -576,8 +587,33 @@ function renderPiano(){const dock=$('#pianoDock');if(dock)dock.style.display='no
 function clearPattern(p=currentPattern){state.patterns[p].forEach(tr=>{if(tr.locked)return;tr.steps.forEach(st=>Object.assign(st,stepTemplate()));tr.noteEvents=[]})}
 function blankLoop(){const writable=tracks().filter(t=>!t.locked),hasNotes=writable.some(t=>t.steps.some(st=>st.v)||noteEvents(t).length);if(!hasNotes)return toast('Loop is already blank');checkpoint();clearPattern();renderAll();toast(tracks().some(t=>t.locked)?'Blank loop · locked tracks kept':'Blank loop')}
 function setStep(t,k,v=2,p=1){const tr=tracks()[t];if(!tr||tr.locked)return;if(isPitchedTrack(tr)){const sc=scaleNotes($('#key').value,$('#scale').value),deg=(k+t)%sc.length,base=tr.role==='bass'?36:48,pitch=base+(t>10?12:0)+sc[deg];if(tr.role==='chord'){const third=base+sc[(deg+2)%sc.length]+((deg+2)>=sc.length?12:0),fifth=base+sc[(deg+4)%sc.length]+((deg+4)>=sc.length?12:0);[pitch,third,fifth].forEach(x=>addNote(tr,x,(k+STEPS)%STEPS,4,v,p,0))}else addNote(tr,pitch,(k+STEPS)%STEPS,1,v,p,0);return}const st=tr.steps[(k+STEPS)%STEPS];st.v=Math.max(st.v,v);st.p=p}
-function generateIdea(){checkpoint();clearPattern();const g=$('#genre').value,d=(+$('#density').value)/100,kick=arr=>arr.forEach(x=>setStep(0,x,3)),snare=arr=>arr.forEach(x=>setStep(1,x,3));if(g==='Techno'||g==='House'){kick([0,4,8,12]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,2));if(g==='House')[3,7,11,15].forEach(x=>setStep(2,x,1,.75))}if(g==='Trap'){kick([0,7,10]);snare([4,12]);[...Array(16).keys()].forEach(x=>{if(x%2===0||chance(.35))setStep(2,x,1,x>11?.75:1)})}if(g==='Breakbeat'){kick([0,3,7,10,14]);snare([4,9,12]);[0,2,4,6,8,10,12,14].forEach(x=>setStep(2,x,1,.75))}if(g==='Funk'){kick([0,3,6,10,13]);snare([4,12,15]);[2,6,10,14].forEach(x=>setStep(2,x,2));[5,11].forEach(x=>setStep(5,x,2))}if(g==='Jaipongan-ish'){kick([0,6,8,13]);snare([4,12]);[1,3,5,7,9,11,14,15].forEach((x,j)=>setStep(j%2?5:6,x,j%3?2:3,j%4?.75:1));[2,10].forEach(x=>setStep(4,x,2))}if(g==='Minimal'){kick([0,8]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,1,.5))}if(g==='Dark Ambient'){[0,5,11].forEach(x=>setStep(13,x,1,.75));[0,8].forEach(x=>setStep(9,x,2));[3,14].forEach(x=>setStep(14,x,1,.5))}for(let t=7;t<15;t++){const count=Math.round((g==='Dark Ambient'?1.4:2.8)*d+Math.random()*3);for(let j=0;j<count;j++){const kk=Math.floor(Math.random()*16);setStep(t,kk,1+Math.floor(Math.random()*3),chance(.22)?.75:1)}}for(let t=3;t<7;t++)for(let kk=0;kk<16;kk++)if(chance(d*.08))setStep(t,kk,1+Math.floor(Math.random()*2),chance(.3)?.5:1);renderAll();toast(`${g} idea generated`)}
-function applyEuclid(){checkpoint();const pulses=clamp(+$('#euclidPulses').value,0,16),n=clamp(+$('#euclidSteps').value,1,16),rot=+$('#euclidRotate').value||0,tr=tracks()[selectedTrack];if(isPitchedTrack(tr))tr.noteEvents=[];else tr.steps.forEach(st=>Object.assign(st,stepTemplate()));for(let i=0;i<n;i++){const prev=Math.floor(i*pulses/n),next=Math.floor((i+1)*pulses/n);if(next>prev){const idx=((i+rot)%n+n)%n;if(isPitchedTrack(tr))addNote(tr,tr.note,idx,1,2);else tr.steps[idx].v=2}}renderAll();toast('Euclidean '+pulses+'/'+n+' applied')}
+function populateCurrentIdea(){
+  const g=$('#genre').value,d=(+$('#density').value)/100,kick=arr=>arr.forEach(x=>setStep(0,x,3)),snare=arr=>arr.forEach(x=>setStep(1,x,3));
+  if(g==='Techno'||g==='House'){kick([0,4,8,12]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,2));if(g==='House')[3,7,11,15].forEach(x=>setStep(2,x,1,.75))}
+  if(g==='Trap'){kick([0,7,10]);snare([4,12]);[...Array(16).keys()].forEach(x=>{if(x%2===0||chance(.35))setStep(2,x,1,x>11?.75:1)})}
+  if(g==='Breakbeat'){kick([0,3,7,10,14]);snare([4,9,12]);[0,2,4,6,8,10,12,14].forEach(x=>setStep(2,x,1,.75))}
+  if(g==='Funk'){kick([0,3,6,10,13]);snare([4,12,15]);[2,6,10,14].forEach(x=>setStep(2,x,2));[5,11].forEach(x=>setStep(5,x,2))}
+  if(g==='Jaipongan-ish'){kick([0,6,8,13]);snare([4,12]);[1,3,5,7,9,11,14,15].forEach((x,j)=>setStep(j%2?5:6,x,j%3?2:3,j%4?.75:1));[2,10].forEach(x=>setStep(4,x,2))}
+  if(g==='Minimal'){kick([0,8]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,1,.5))}
+  if(g==='Dark Ambient'){[0,5,11].forEach(x=>setStep(13,x,1,.75));[0,8].forEach(x=>setStep(9,x,2));[3,14].forEach(x=>setStep(14,x,1,.5))}
+  for(let t=7;t<15;t++){const count=Math.round((g==='Dark Ambient'?1.4:2.8)*d+Math.random()*3);for(let j=0;j<count;j++){const kk=Math.floor(Math.random()*16);setStep(t,kk,1+Math.floor(Math.random()*3),chance(.22)?.75:1)}}
+  for(let t=3;t<7;t++)for(let kk=0;kk<16;kk++)if(chance(d*.08))setStep(t,kk,1+Math.floor(Math.random()*2),chance(.3)?.5:1)
+}
+function generateIdea(){
+  checkpoint();clearPattern();populateCurrentIdea();renderAll();toast($('#genre').value+' · part '+currentPattern+' generated')
+}
+function generateAllParts(){
+  checkpoint();
+  currentPattern='A';clearPattern('A');populateCurrentIdea();
+  const base=structuredClone(state.patterns.A);
+  state.patterns.B=structuredClone(base);state.patterns.C=structuredClone(base);state.patterns.D=structuredClone(base);
+  const seed=(+$('#genSeed').value||1080)^hash32($('#genre').value+'|'+$('#key').value+'|'+$('#scale').value+'|all-parts');
+  mutatePattern('B',seed^0xB,.14);mutatePattern('C',seed^0xC,.25);mutatePattern('D',seed^0xD,.36);
+  $('#chain').value='A B C D';chainPos=0;switchPattern('A');
+  $('#genResult').textContent='A is the base. B, C, and D are editable variations. Play all runs A → B → C → D.';
+  toast('Generated parts A–D')
+}
+function applyEuclid(){function applyEuclid(){checkpoint();const pulses=clamp(+$('#euclidPulses').value,0,16),n=clamp(+$('#euclidSteps').value,1,16),rot=+$('#euclidRotate').value||0,tr=tracks()[selectedTrack];if(isPitchedTrack(tr))tr.noteEvents=[];else tr.steps.forEach(st=>Object.assign(st,stepTemplate()));for(let i=0;i<n;i++){const prev=Math.floor(i*pulses/n),next=Math.floor((i+1)*pulses/n);if(next>prev){const idx=((i+rot)%n+n)%n;if(isPitchedTrack(tr))addNote(tr,tr.note,idx,1,2);else tr.steps[idx].v=2}}renderAll();toast('Euclidean '+pulses+'/'+n+' applied')}
 function humanizeTrack(){checkpoint();const amt=clamp(+$('#humanizeMs').value,0,80),tr=tracks()[selectedTrack];if(isPitchedTrack(tr)){noteEvents(tr).forEach(n=>{n.shift=Math.round((Math.random()*2-1)*amt);if(chance(.4))n.velocity=clamp(n.velocity+(chance(.5)?1:-1),1,3)})}else tr.steps.forEach(st=>{if(st.v){st.shift=Math.round((Math.random()*2-1)*amt);if(chance(.4))st.v=clamp(st.v+(chance(.5)?1:-1),1,3)}});renderAll();toast('Humanized ±'+amt+' ms')}
 function hash32(text){let h=2166136261>>>0;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function seeded(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -606,7 +642,7 @@ function runGen(){const prompt=$('#genPrompt').value.trim(),target=$('#genTarget
 function fillGaps(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('Selected track is locked');checkpoint();const rng=seeded((+$('#genSeed').value||0)^hash32($('#genPrompt').value+'fill'+selectedTrack));if(isPitchedTrack(tr)){const occupied=new Set(noteEvents(tr).map(n=>n.start));for(let k=0;k<16;k++){if(occupied.has(k))continue;const prev=occupied.has((k+15)%16),next=occupied.has((k+1)%16);if((prev||next)&&rng()<.28)addNote(tr,tr.note,k,1,1,.5,Math.round((rng()*2-1)*10))}}else{for(let k=0;k<16;k++){if(tr.steps[k].v)continue;const prev=tr.steps[(k+15)%16].v,next=tr.steps[(k+1)%16].v;if((prev||next)&&rng()<.34){tr.steps[k].v=1;tr.steps[k].p=.5;tr.steps[k].shift=Math.round((rng()*2-1)*10)}}}renderAll();toast('Gaps filled with ghost notes')}
 function mutatePattern(p,seed,amount=.18){const ts=state.patterns[p],rng=seeded(seed);ts.forEach((tr,i)=>{if(tr.locked)return;if(isPitchedTrack(tr)){const sc=scaleNotes($('#key').value,$('#scale').value);noteEvents(tr).forEach(n=>{if(rng()>=amount)return;if(rng()<.3)n.velocity=clamp(n.velocity+(rng()<.5?-1:1),1,3);if(rng()<.3)n.length=clamp(n.length+(rng()<.5?-1:1),1,STEPS-n.start);if(rng()<.25)n.pitch=clamp(48+(i>10?12:0)+sc[Math.floor(rng()*sc.length)],24,108);if(rng()<.25)n.shift=Math.round((rng()*2-1)*14)});return}tr.steps.forEach(st=>{if(rng()>=amount)return;if(st.v&&rng()<.45)st.v=clamp(st.v+(rng()<.5?-1:1),1,3);else if(!st.v&&rng()<.45){st.v=1+Math.floor(rng()*2);st.p=rng()<.35?.75:1}if(rng()<.25)st.shift=Math.round((rng()*2-1)*14)})})}
 function variationToNext(){checkpoint();const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4],seed=(+$('#genSeed').value||0)^hash32($('#genPrompt').value+n);state.patterns[n]=structuredClone(state.patterns[currentPattern]);mutatePattern(n,seed,.24);switchPattern(n);$('#genResult').textContent=`Variation created in ${n}; locked tracks preserved.`;toast(`Variation → ${n}`)}
-function buildSong(){checkpoint();const base=structuredClone(state.patterns[currentPattern]);state.patterns.A=structuredClone(base);state.patterns.B=structuredClone(base);state.patterns.C=structuredClone(base);state.patterns.D=structuredClone(base);const seed=(+$('#genSeed').value||0)^hash32($('#genPrompt').value+'song');mutatePattern('B',seed^0xB,.16);mutatePattern('C',seed^0xC,.27);mutatePattern('D',seed^0xD,.38);$('#chain').value='A A B A C B D B';switchPattern('A');$('#genResult').textContent='Built four editable scenes: A base, B light variation, C medium, D strongest.';toast('A/B/C/D song scenes built')}
+function buildSong(){generateAllParts()}
 function renderAll(){renderSeq();renderMixer();syncSoundPanel();syncStepPanel();syncPianoToggle();renderPiano()}
 
 function parseChain(){const a=$('#chain').value.toUpperCase().match(/[ABCD]/g);return a&&a.length?a:['A']}
@@ -614,7 +650,7 @@ function switchPattern(p,rerender=true){if(!state.patterns[p])return;currentPatt
 async function loadSample(file){ensureAudio();const ab=await file.arrayBuffer();sampleBuffers[selectedTrack]=await ctx.decodeAudioData(ab.slice(0));checkpoint();tracks()[selectedTrack].type='sample';tracks()[selectedTrack].sliceMode=true;$('#soundType').value='sample';renderAll();toast(`Sample loaded: ${file.name}`)}
 
 function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:structuredClone(state)}}
-function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=structuredClone(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#chain').value=p.chain||'A A B A';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
+function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=structuredClone(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
 function checkpoint(){try{history.push(JSON.stringify(projectData()));if(history.length>50)history.shift();future.length=0}catch(_){}}
 function undo(){if(!history.length)return toast('Nothing to undo');future.push(JSON.stringify(projectData()));applyProject(JSON.parse(history.pop()));toast('Undo')}
 function redo(){if(!future.length)return toast('Nothing to redo');history.push(JSON.stringify(projectData()));applyProject(JSON.parse(future.pop()));toast('Redo')}
@@ -635,20 +671,20 @@ function init(){
   if(localStorage.getItem('loopforge-welcome-hidden')==='1') $('#welcome').style.display='none';
   $('#hideWelcome').onclick=()=>{$('#welcome').style.display='none';localStorage.setItem('loopforge-welcome-hidden','1')};
   $('#moreBtn').onclick=()=>{const easy=document.body.classList.toggle('easy');$('#moreBtn').classList.toggle('on',!easy);$('#moreBtn').textContent=easy?'More':'Less'};
-  $('#playBtn').onclick=()=>isPlaying?stop():play();$('#stopBtn').onclick=stop;
+  $('#playBtn').onclick=playCurrent;$('#playAllBtn').onclick=playAllParts;$('#stopBtn').onclick=stop;
   $('#recordBtn').onclick=()=>{recordArm=!recordArm;$('#recordBtn').classList.toggle('danger',recordArm);$('#recordBtn').classList.toggle('primary',recordArm);toast(recordArm?'Record ready':'Record off')};
   $('#metroBtn').onclick=()=>{metro=!metro;$('#metroBtn').classList.toggle('primary',metro)};
   $('#typingBtn').onclick=()=>{typingMode=!typingMode;$('#typingBtn').classList.toggle('primary',typingMode);toast(typingMode?'Keyboard notes on':'Keyboard notes off')};
   $('#midiBtn').onclick=enableMidi;$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
-  $('#swing').oninput=e=>$('#swingVal').textContent=e.target.value+'%';$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;
+  $('#swing').oninput=e=>$('#swingVal').textContent=e.target.value+'%';$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#generateAll').onclick=generateAllParts;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;
   $('#previewSound').onclick=()=>{ensureAudio();const tr=tracks()[selectedTrack];hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)};$('#sampleFile').onchange=e=>e.target.files[0]&&loadSample(e.target.files[0]);
   $('#exportWavBtn').onclick=()=>exportWav().catch(e=>{console.error(e);toast('WAV export failed: '+e.message)});$('#stemWavBtn').onclick=()=>exportStem().catch(e=>{console.error(e);toast('Stem export failed: '+e.message)});
   $$('.patternbtn').forEach(b=>b.onclick=()=>switchPattern(b.dataset.pattern));$('#copyPattern').onclick=()=>{checkpoint();const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];state.patterns[n]=structuredClone(state.patterns[currentPattern]);switchPattern(n);toast(`Copied to pattern ${n}`)};
-  $('#songMode').onclick=()=>{songMode=!songMode;chainPos=0;$('#songMode').textContent='Song: '+(songMode?'on':'off');$('#songMode').classList.toggle('primary',songMode)};
+  $('#songMode').onclick=()=>{songMode=!songMode;chainPos=0;updatePlaybackButtons()};
   $('#pianoToggle').onclick=()=>toggleTrackNotes(selectedTrack);$('#pianoOctDown').onclick=()=>{pianoOctaveShift=clamp(pianoOctaveShift-1,-3,3);renderPiano()};$('#pianoOctUp').onclick=()=>{pianoOctaveShift=clamp(pianoOctaveShift+1,-3,3);renderPiano()};
   $$('.tab').forEach(b=>b.onclick=()=>{$$('.sidepanel').forEach(p=>p.style.display='none');$$('.tab').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.show).style.display='block';b.classList.add('active')});
   $('#saveLocal').onclick=()=>{localStorage.setItem('loopforge16-v4',JSON.stringify(projectData()));toast('Saved locally')};$('#loadLocal').onclick=()=>{const x=localStorage.getItem('loopforge16-v4')||localStorage.getItem('loopforge16-v3')||localStorage.getItem('loopforge16-v2')||localStorage.getItem('loopforge16');if(!x)return toast('No local project');try{applyProject(JSON.parse(x),true)}catch(e){toast(e.message)}};$('#exportJson').onclick=()=>download('loopforge16-v4.4-project.json',new Blob([JSON.stringify(projectData(),null,2)],{type:'application/json'}));$('#importJson').onchange=async e=>{try{checkpoint();applyProject(JSON.parse(await e.target.files[0].text()),true)}catch(err){toast(err.message)}};$('#clearProject').onclick=()=>{if(confirm('Clear all patterns?')){checkpoint();['A','B','C','D'].forEach(p=>state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i)));switchPattern('A');toast('Project cleared')}};
-  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.code==='Space'){e.preventDefault();isPlaying?stop():play();return}if(typingMode&&!e.ctrlKey&&!e.metaKey&&!e.repeat){const n=typingMap[e.key.toLowerCase()];if(n!=null){e.preventDefault();performNote(n,.82)}}});
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.code==='Space'){e.preventDefault();playCurrent();return}if(typingMode&&!e.ctrlKey&&!e.metaKey&&!e.repeat){const n=typingMap[e.key.toLowerCase()];if(n!=null){e.preventDefault();performNote(n,.82)}}});
   history.length=0;future.length=0;
 }
 init();
