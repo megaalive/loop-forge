@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.2.1 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.2 — modern / elegant / compact restyle ===== */
+/* ===== LOOPFORGE-16 v4.2.1 — bugfix pass ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -228,7 +228,6 @@ kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;pad
 /* ---------- easy / advanced mode ---------- */
 .more-toggle{margin-left:auto}
 .more-toggle.on{border-color:var(--accent-2);color:var(--accent-2)}
-.advanced-only{display:initial}
 body.easy .advanced-only{display:none!important}
 body.easy .status{display:none}
 body.easy .genbox{display:none}
@@ -238,6 +237,11 @@ body.easy .tracknum{display:none}
 body.easy .simple-track-actions .lock,
 body.easy .simple-track-actions .warn{display:none}
 body.easy .simple-track-actions .mini{min-width:24px;padding:3px}
+body.easy .trackrole{display:none}
+body.easy .mixer-head,body.easy .mixer-row{grid-template-columns:minmax(90px,1fr) minmax(70px,auto) 30px}
+body.easy .mixer-head>:nth-child(1),body.easy .mixer-head>:nth-child(3),body.easy .mixer-head>:nth-child(6),
+body.easy .mixer-row>:nth-child(1),body.easy .mixer-row>:nth-child(3),body.easy .mixer-row>:nth-child(6){display:none}
+body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ---------- responsive ---------- */
 @media (max-width:900px){
@@ -358,7 +362,7 @@ body.easy .simple-track-actions .mini{min-width:24px;padding:3px}
       <section class="panel sidepanel" id="sound" style="display:none">
         <h3>SOUND — <span id="selectedName">Track</span></h3><div class="body">
           <label class="control" style="margin-bottom:8px">Name<input id="trackName" maxlength="24"></label>
-          <div class="row">
+          <div class="row advanced-only">
             <label class="control">Role<select id="trackRole"><option>kick</option><option>snare</option><option>hat</option><option>perc</option><option>bass</option><option>chord</option><option>melody</option><option>arp</option><option>texture</option><option>fx</option><option>sample</option></select></label>
             <label class="control">Lock from changes<select id="trackLock"><option value="false">Unlocked</option><option value="true">Locked</option></select></label>
           </div>
@@ -448,6 +452,7 @@ const defaultRoles=['kick','snare','hat','hat','perc','perc','perc','bass','bass
 const keys=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const noteNames=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+function escHtml(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
 let ctx=null, master=null, scheduler=null, nextNoteTime=0, currentStep=0, lastPlayStep=0, isPlaying=false;
 let selectedTrack=0, selectedStep=0, currentPattern='A', songMode=false, chainPos=0, pianoOpen=false, pianoOctaveShift=0;
 let metro=false, recordArm=false, typingMode=false, midiAccess=null, clipboardStep=null;
@@ -519,14 +524,14 @@ function renderSeq(){
   tracks().forEach((tr,i)=>{
     const row=document.createElement('div');row.className='track'+(i===selectedTrack?' selected':'');row.classList.toggle('locked',!!tr.locked);
     const lab=document.createElement('div');lab.className='tracklabel';
-    lab.innerHTML=`<span class="tracknum">${String(i+1).padStart(2,'0')}</span><span class="trackname">${tr.name}</span><span class="trackrole">${tr.role||''}</span><span class="simple-track-actions"><button class="mini lock ${tr.locked?'on':''}" data-act="lock" title="Lock this row">L</button><button class="mini ${tr.mute?'on':''}" data-act="mute" title="Mute this row">M</button><button class="mini warn ${tr.solo?'on':''}" data-act="solo" title="Hear only this row">S</button></span>`;
+    lab.innerHTML=`<span class="tracknum">${String(i+1).padStart(2,'0')}</span><span class="trackname">${escHtml(tr.name)}</span><span class="trackrole">${escHtml(tr.role||'')}</span><span class="simple-track-actions"><button class="mini lock ${tr.locked?'on':''}" data-act="lock" title="Lock this row">L</button><button class="mini ${tr.mute?'on':''}" data-act="mute" title="Mute this row">M</button><button class="mini warn ${tr.solo?'on':''}" data-act="solo" title="Hear only this row">S</button></span>`;
     lab.addEventListener('click',e=>{if(e.target.dataset.act==='lock'){checkpoint();tr.locked=!tr.locked;renderAll();return}if(e.target.dataset.act==='mute'){checkpoint();tr.mute=!tr.mute;renderAll();return}if(e.target.dataset.act==='solo'||e.shiftKey){checkpoint();tr.solo=!tr.solo;renderAll();return}selectedTrack=i;syncSoundPanel();syncStepPanel();renderAll()});row.appendChild(lab);
     tr.steps.forEach((st,k)=>{const b=document.createElement('button');b.className='step '+(st.v?'v'+st.v:'')+(i===selectedTrack&&k===selectedStep?' selected-step':'');b.dataset.step=k;b.dataset.prob=st.p<1?Math.round(st.p*100)+'%':'';b.dataset.extra=tr.type==='synth'&&st.n!=null?noteName(st.n):tr.type==='sample'&&tr.sliceMode?'S'+(st.slice+1):(st.shift?((st.shift>0?'+':'')+st.shift):'');b.setAttribute('aria-label',`${tr.name}, beat ${k+1}, ${st.v?'on':'off'}`);b.title=`${tr.name} · beat ${k+1}`;
       b.addEventListener('click',e=>{selectedTrack=i;selectedStep=k;checkpoint();if(e.shiftKey)st.v=st.v?((st.v%3)+1):1;else st.v=st.v?0:2;renderAll()});
       b.addEventListener('contextmenu',e=>{e.preventDefault();selectedTrack=i;selectedStep=k;checkpoint();st.p=({1:.75,.75:.5,.5:.25,.25:1})[st.p]||1;renderAll()});row.appendChild(b)});root.appendChild(row)
   });
 }
-function renderMixer(){const b=$('#mixerBody');b.innerHTML='';tracks().forEach((tr,i)=>{const r=document.createElement('div');r.className='mixer-row';r.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><input aria-label="volume" type="range" min="0" max="100" value="${Math.round(tr.volume*100)}"><input aria-label="pan" type="range" min="-100" max="100" value="${Math.round(tr.pan*100)}"><span>${tr.name.slice(0,7)}</span><button class="mini ${tr.mute?'on':''}">M</button><button class="mini warn ${tr.solo?'on':''}">S</button>`;const [vol,pan,m,so]=[r.children[1],r.children[2],r.children[4],r.children[5]];vol.onpointerdown=pan.onpointerdown=checkpoint;vol.oninput=()=>tr.volume=vol.value/100;pan.oninput=()=>tr.pan=pan.value/100;m.onclick=()=>{checkpoint();tr.mute=!tr.mute;renderAll()};so.onclick=()=>{checkpoint();tr.solo=!tr.solo;renderAll()};b.appendChild(r)})}
+function renderMixer(){const b=$('#mixerBody');b.innerHTML='';tracks().forEach((tr,i)=>{const r=document.createElement('div');r.className='mixer-row';r.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><input aria-label="volume" type="range" min="0" max="100" value="${Math.round(tr.volume*100)}"><input aria-label="pan" type="range" min="-100" max="100" value="${Math.round(tr.pan*100)}"><span title="${escHtml(tr.name)}">${escHtml(tr.name)}</span><button class="mini ${tr.mute?'on':''}">M</button><button class="mini warn ${tr.solo?'on':''}">S</button>`;const [vol,pan,m,so]=[r.children[1],r.children[2],r.children[4],r.children[5]];vol.onpointerdown=pan.onpointerdown=checkpoint;vol.oninput=()=>tr.volume=vol.value/100;pan.oninput=()=>tr.pan=pan.value/100;m.onclick=()=>{checkpoint();tr.mute=!tr.mute;renderAll()};so.onclick=()=>{checkpoint();tr.solo=!tr.solo;renderAll()};b.appendChild(r)})}
 function renderSlicePads(){const root=$('#slicePads');root.innerHTML='';const tr=tracks()[selectedTrack],st=currentStepObj();for(let i=0;i<16;i++){const b=document.createElement('button');b.className='pad'+(tr.sliceMode&&st.slice===i?' active':'');b.textContent=String(i+1).padStart(2,'0');b.onclick=()=>{selectedStepObjAssignSlice(i,true)};root.appendChild(b)}}
 function selectedStepObjAssignSlice(i,preview){checkpoint();const tr=tracks()[selectedTrack],st=currentStepObj();tr.sliceMode=true;st.slice=i;$('#sampleMode').value='slice';renderAll();if(preview)auditionSlice(i)}
 function auditionSlice(i){ensureAudio();const tr=tracks()[selectedTrack],buf=sampleBuffers[selectedTrack];if(!buf)return toast('Load a sample first');const was=tr.sliceMode;tr.sliceMode=true;hit(ctx,tr,ctx.currentTime+.015,.9,tr.note,buf,i,selectedTrack,tracks(),true);tr.sliceMode=was}
@@ -540,8 +545,8 @@ function auditionSelectedStep(){ensureAudio();const tr=tracks()[selectedTrack],s
 
 function renderPiano(){const dock=$('#pianoDock');dock.style.display=pianoOpen?'block':'none';if(!pianoOpen)return;const tr=tracks()[selectedTrack];$('#pianoTrackName').textContent=tr.name;$('#pianoOctLabel').textContent='OCT '+pianoOctaveShift;const root=$('#pianoGrid');root.innerHTML='';if(tr.type!=='synth'){root.innerHTML='<div class="small">Piano roll aktif untuk track Synth. Ubah Type di SOUND jika track ini ingin dimainkan sebagai nada.</div>';return}const base=Math.floor(tr.note/12)*12+pianoOctaveShift*12;for(let n=base+23;n>=base;n--){const row=document.createElement('div');row.className='piano-row';const lab=document.createElement('div');lab.className='piano-label';lab.textContent=noteName(n);row.appendChild(lab);for(let k=0;k<16;k++){const s=tr.steps[k],c=document.createElement('button');c.className='piano-cell '+([1,3,6,8,10].includes(n%12)?'black ':'')+(s.v&&s.n===n?'on':'');c.dataset.step=k;c.onclick=()=>{selectedStep=k;checkpoint();if(s.v&&s.n===n){s.v=0;s.n=null}else{s.v=Math.max(2,s.v);s.n=n}renderAll()};row.appendChild(c)}root.appendChild(row)}}
 
-function clearPattern(p=currentPattern){state.patterns[p].forEach(t=>t.steps.forEach(s=>Object.assign(s,stepTemplate())))}
-function setStep(t,k,v=2,p=1){const s=tracks()[t].steps[(k+STEPS)%STEPS];s.v=Math.max(s.v,v);s.p=p}
+function clearPattern(p=currentPattern){state.patterns[p].forEach(t=>{if(t.locked)return;t.steps.forEach(s=>Object.assign(s,stepTemplate()))})}
+function setStep(t,k,v=2,p=1){const tr=tracks()[t];if(!tr||tr.locked)return;const s=tr.steps[(k+STEPS)%STEPS];s.v=Math.max(s.v,v);s.p=p}
 function generateIdea(){checkpoint();clearPattern();const g=$('#genre').value,d=(+$('#density').value)/100,kick=arr=>arr.forEach(x=>setStep(0,x,3)),snare=arr=>arr.forEach(x=>setStep(1,x,3));if(g==='Techno'||g==='House'){kick([0,4,8,12]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,2));if(g==='House')[3,7,11,15].forEach(x=>setStep(2,x,1,.75))}if(g==='Trap'){kick([0,7,10]);snare([4,12]);[...Array(16).keys()].forEach(x=>{if(x%2===0||chance(.35))setStep(2,x,1,x>11?.75:1)})}if(g==='Breakbeat'){kick([0,3,7,10,14]);snare([4,9,12]);[0,2,4,6,8,10,12,14].forEach(x=>setStep(2,x,1,.75))}if(g==='Funk'){kick([0,3,6,10,13]);snare([4,12,15]);[2,6,10,14].forEach(x=>setStep(2,x,2));[5,11].forEach(x=>setStep(5,x,2))}if(g==='Jaipongan-ish'){kick([0,6,8,13]);snare([4,12]);[1,3,5,7,9,11,14,15].forEach((x,j)=>setStep(j%2?5:6,x,j%3?2:3,j%4?.75:1));[2,10].forEach(x=>setStep(4,x,2))}if(g==='Minimal'){kick([0,8]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,1,.5))}if(g==='Dark Ambient'){[0,5,11].forEach(x=>setStep(13,x,1,.75));[0,8].forEach(x=>setStep(9,x,2));[3,14].forEach(x=>setStep(14,x,1,.5))}for(let t=7;t<15;t++){const count=Math.round((g==='Dark Ambient'?1.4:2.8)*d+Math.random()*3);for(let j=0;j<count;j++){const kk=Math.floor(Math.random()*16);setStep(t,kk,1+Math.floor(Math.random()*3),chance(.22)?.75:1)}}for(let t=3;t<7;t++)for(let kk=0;kk<16;kk++)if(chance(d*.08))setStep(t,kk,1+Math.floor(Math.random()*2),chance(.3)?.5:1);renderAll();toast(`${g} idea generated`)}
 function applyEuclid(){checkpoint();const pulses=clamp(+$(`#euclidPulses`).value,0,16),n=clamp(+$(`#euclidSteps`).value,1,16),rot=+$(`#euclidRotate`).value||0,tr=tracks()[selectedTrack];tr.steps.forEach(s=>Object.assign(s,stepTemplate()));for(let i=0;i<n;i++){const prev=Math.floor(i*pulses/n),next=Math.floor((i+1)*pulses/n);if(next>prev){const idx=((i+rot)%n+n)%n;tr.steps[idx].v=2}}renderAll();toast(`Euclidean ${pulses}/${n} applied`)}
 function humanizeTrack(){checkpoint();const amt=clamp(+$(`#humanizeMs`).value,0,80),tr=tracks()[selectedTrack];tr.steps.forEach(s=>{if(s.v){s.shift=Math.round((Math.random()*2-1)*amt);if(chance(.4))s.v=clamp(s.v+(chance(.5)?1:-1),1,3)}});renderAll();toast(`Humanized ±${amt} ms`)}
