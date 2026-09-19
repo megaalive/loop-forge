@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.5.7 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.5.8 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.5.7 — realtime track buses and stoppable preview ===== */
+/* ===== LOOPFORGE-16 v4.5.8 — realtime mute/solo lifecycle ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -615,7 +615,7 @@ function getTrackBus(trackIndex){
   if(!ctx||trackIndex<0||trackIndex>=TRACKS)return null;
   if(trackBuses[trackIndex])return trackBuses[trackIndex];
   const gain=ctx.createGain(),pan=ctx.createStereoPanner?ctx.createStereoPanner():ctx.createGain();
-  gain.connect(pan);pan.connect(master);
+  gain.gain.value=0;gain.connect(pan);pan.connect(master);
   trackBuses[trackIndex]={gain,pan};return trackBuses[trackIndex]
 }
 function syncTrackBuses(){
@@ -627,6 +627,10 @@ function syncTrackBuses(){
     bus.gain.gain.setValueAtTime(audible?Math.max(0,tr.volume):0,now);
     if(bus.pan.pan)bus.pan.pan.setValueAtTime(tr.pan,now)
   })
+}
+function resetTrackBuses(){
+  trackBuses.forEach(bus=>{if(!bus)return;try{bus.gain.disconnect()}catch(_){}try{bus.pan.disconnect()}catch(_){}});
+  trackBuses=Array(TRACKS).fill(null)
 }
 function outChain(ac,tr,when,vel,trackIndex=-1){
   const gain=ac.createGain();gain.gain.setValueAtTime(Math.max(.0001,vel),when);
@@ -704,6 +708,7 @@ async function play(){
   if(epoch!==transportEpoch)return;
   isStarting=false;
   if(!ok){updatePlaybackButtons();toast('Audio is blocked. Tap Enable audio, then Play.');updateAudioStatus();return}
+  syncTrackBuses();
   isPlaying=true;nextNoteTime=ctx.currentTime+.08;schedulerTick();scheduler=setInterval(schedulerTick,50);updatePlaybackButtons();
   toast(songMode?'Playing '+parseChain().join(' → '):'Playing part '+currentPattern)
 }
@@ -711,7 +716,7 @@ function stop(){
   transportEpoch++;isStarting=false;
   if(scheduler){clearInterval(scheduler);scheduler=null}
   isPlaying=false;currentStep=0;chainPos=0;
-  paintPlayhead(-1);stopSoundPreview();stopIOSMediaBridge();updatePlaybackButtons()
+  paintPlayhead(-1);stopSoundPreview();resetTrackBuses();stopIOSMediaBridge();updatePlaybackButtons()
 }
 function playCurrent(){
   if(isPlaying||isStarting){stop();return}
@@ -763,14 +768,14 @@ function renderSeq(){
 function renderMixer(){const b=$('#mixerBody');b.innerHTML='';tracks().forEach((tr,i)=>{const r=document.createElement('div');r.className='mixer-row';r.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><input aria-label="volume" type="range" min="0" max="100" value="${Math.round(tr.volume*100)}"><input aria-label="pan" type="range" min="-100" max="100" value="${Math.round(tr.pan*100)}"><span title="${escHtml(tr.name)}">${escHtml(tr.name)}</span><button class="mini ${tr.mute?'on':''}">M</button><button class="mini warn ${tr.solo?'on':''}">S</button>`;const [vol,pan,m,so]=[r.children[1],r.children[2],r.children[4],r.children[5]];vol.onpointerdown=pan.onpointerdown=checkpoint;vol.oninput=()=>{tr.volume=vol.value/100;syncTrackBuses()};pan.oninput=()=>{tr.pan=pan.value/100;syncTrackBuses()};m.onclick=()=>toggleTrackMute(tr,i);so.onclick=()=>toggleTrackSolo(tr);b.appendChild(r)})}
 function renderSlicePads(){const root=$('#slicePads');root.innerHTML='';const tr=tracks()[selectedTrack],st=currentStepObj();for(let i=0;i<16;i++){const b=document.createElement('button');b.className='pad'+(tr.sliceMode&&st.slice===i?' active':'');b.textContent=String(i+1).padStart(2,'0');b.onclick=()=>{selectedStepObjAssignSlice(i,true)};root.appendChild(b)}}
 function selectedStepObjAssignSlice(i,preview){checkpoint();const tr=tracks()[selectedTrack],st=currentStepObj();tr.sliceMode=true;st.slice=i;$('#sampleMode').value='slice';renderAll();if(preview)auditionSlice(i)}
-function auditionSlice(i){ensureAudio();const tr=tracks()[selectedTrack],buf=sampleBuffers[selectedTrack];if(!buf)return toast('Load a sample first');const was=tr.sliceMode;tr.sliceMode=true;hit(ctx,tr,ctx.currentTime+.015,.9,tr.note,buf,i,selectedTrack,tracks(),true);tr.sliceMode=was}
+async function auditionSlice(i){if(!await ensureAudio())return;const tr=tracks()[selectedTrack],buf=sampleBuffers[selectedTrack];if(!buf)return toast('Load a sample first');if(tr.mute)return toast('This track is muted');syncTrackBuses();const was=tr.sliceMode;tr.sliceMode=true;hit(ctx,tr,ctx.currentTime+.015,.9,tr.note,buf,i,selectedTrack,tracks(),true);tr.sliceMode=was}
 
 function syncSoundPanel(){const tr=tracks()[selectedTrack];$('#selectedName').textContent=tr.name;$('#trackName').value=tr.name;$('#trackRole').value=tr.role||defaultRoles[selectedTrack];$('#trackLock').value=String(!!tr.locked);const map={soundType:'type',tune:'tune',oscA:'oscA',oscB:'oscB',oscMix:'oscMix',fm:'fm',cutoff:'cutoff',resonance:'resonance',attack:'attack',decay:'decay',sustain:'sustain',release:'release'};Object.entries(map).forEach(([id,key])=>{const el=$('#'+id),v=tr[key];el.value=['oscMix','fm','sustain'].includes(id)?Math.round(v*100):['attack','decay','release'].includes(id)?Math.round(v*1000):v});$('#sampleMode').value=tr.sliceMode?'slice':'full';renderSlicePads()}
 function bindSound(){const transform={soundType:v=>v,tune:v=>+v,oscA:v=>v,oscB:v=>v,oscMix:v=>v/100,fm:v=>v/100,cutoff:v=>+v,resonance:v=>+v,attack:v=>v/1000,decay:v=>v/1000,sustain:v=>v/100,release:v=>v/1000};Object.entries(transform).forEach(([id,fn])=>{const el=$('#'+id);el.addEventListener('pointerdown',checkpoint);el.addEventListener('input',e=>{const key={soundType:'type'}[id]||id;tracks()[selectedTrack][key]=fn(e.target.value)})});$('#trackName').addEventListener('change',e=>{checkpoint();tracks()[selectedTrack].name=(e.target.value.trim()||names[selectedTrack]).slice(0,24);renderAll()});$('#trackRole').onchange=e=>{checkpoint();tracks()[selectedTrack].role=e.target.value;renderAll()};$('#trackLock').onchange=e=>{checkpoint();tracks()[selectedTrack].locked=e.target.value==='true';renderAll()};$('#sampleMode').onchange=e=>{checkpoint();tracks()[selectedTrack].sliceMode=e.target.value==='slice';renderAll()}}
 
 function syncStepPanel(){const tr=tracks()[selectedTrack],pitched=isPitchedTrack(tr),st=currentStepObj();$('#stepTitle').textContent=pitched?'T'+String(selectedTrack+1).padStart(2,'0')+' / NOTES':'T'+String(selectedTrack+1).padStart(2,'0')+' / S'+String(selectedStep+1).padStart(2,'0');['stepVelocity','stepProb','stepShift','stepNote','stepSlice','clearStep','copyStep','pasteStep'].forEach(id=>$('#'+id).disabled=pitched);$('#stepVelocity').value=st.v;$('#stepProb').value=String(st.p);$('#stepShift').value=st.shift||0;$('#shiftVal').textContent=pitched?'use inline notes':(st.shift||0)+' ms';$('#stepNote').value=st.n==null?'':st.n;$('#stepSlice').value=(st.slice||0)+1}
 function bindStepPanel(){const change=(id,fn)=>{$('#'+id).addEventListener('change',e=>{if(isPitchedTrack(tracks()[selectedTrack]))return;checkpoint();fn(currentStepObj(),e.target.value);renderAll()})};change('stepVelocity',(st,v)=>st.v=+v);change('stepProb',(st,v)=>st.p=+v);$('#stepShift').addEventListener('pointerdown',()=>{if(!isPitchedTrack(tracks()[selectedTrack]))checkpoint()});$('#stepShift').addEventListener('input',e=>{if(isPitchedTrack(tracks()[selectedTrack]))return;currentStepObj().shift=+e.target.value;$('#shiftVal').textContent=e.target.value+' ms';renderSeq()});change('stepNote',(st,v)=>st.n=v===''?null:clamp(+v,24,108));change('stepSlice',(st,v)=>st.slice=clamp(+v-1,0,15));$('#clearStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;checkpoint();Object.assign(currentStepObj(),stepTemplate());renderAll()};$('#copyStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;clipboardStep=cloneData(currentStepObj());toast('Step copied')};$('#pasteStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;if(!clipboardStep)return toast('Clipboard step empty');checkpoint();Object.assign(currentStepObj(),cloneData(clipboardStep));renderAll()};$('#auditionStep').onclick=auditionSelectedStep}
-async function auditionSelectedStep(){if(!await ensureAudio())return toast('Audio is blocked. Tap again.');const tr=tracks()[selectedTrack];if(isPitchedTrack(tr)){const ns=notesAtStart(tr,selectedStep);if(!ns.length)return toast('Add a note in the inline piano roll');ns.forEach(n=>hit(ctx,tr,ctx.currentTime+.015,noteVelocity(n.velocity),n.pitch,null,0,selectedTrack,tracks(),true,n.length*secondsPerStep()));return}const st=currentStepObj();hit(ctx,tr,ctx.currentTime+.015,[.5,.45,.72,1][st.v||2],resolvedNote(tr,selectedTrack,st,selectedStep),null,st.slice||0,selectedTrack,tracks(),true)}
+async function auditionSelectedStep(){if(!await ensureAudio())return toast('Audio is blocked. Tap again.');const tr=tracks()[selectedTrack];if(tr.mute)return toast('This track is muted');syncTrackBuses();if(isPitchedTrack(tr)){const ns=notesAtStart(tr,selectedStep);if(!ns.length)return toast('Add a note in the inline piano roll');ns.forEach(n=>hit(ctx,tr,ctx.currentTime+.015,noteVelocity(n.velocity),n.pitch,null,0,selectedTrack,tracks(),true,n.length*secondsPerStep()));return}const st=currentStepObj();hit(ctx,tr,ctx.currentTime+.015,[.5,.45,.72,1][st.v||2],resolvedNote(tr,selectedTrack,st,selectedStep),null,st.slice||0,selectedTrack,tracks(),true)}
 
 function renderPiano(){const dock=$('#pianoDock');if(dock)dock.style.display='none'}
 
@@ -852,7 +857,7 @@ async function exportStem(){toast(`Rendering ${tracks()[selectedTrack].name}…`
 
 async function enableMidi(){if(!navigator.requestMIDIAccess)return toast('Web MIDI unavailable in this browser');try{midiAccess=await navigator.requestMIDIAccess();const bind=()=>{for(const input of midiAccess.inputs.values())input.onmidimessage=onMidiMessage;$('#midiStatus').textContent=`[${midiAccess.inputs.size||'ON'}]`;$('#midiBtn').classList.add('primary')};bind();midiAccess.onstatechange=bind;toast('MIDI enabled')}catch(e){toast('MIDI permission denied')}}
 function onMidiMessage(e){const [status,note,vel]=e.data,cmd=status&0xf0;if(cmd===0x90&&vel>0)performNote(note,vel/127)}
-async function performNote(note,velocity=.8){if(!await ensureAudio())return;const tr=tracks()[selectedTrack];hit(ctx,tr,ctx.currentTime+.01,velocity,note,null,currentStepObj().slice||0,selectedTrack,tracks(),true,secondsPerStep());if(recordArm){checkpoint();const k=clamp(isPlaying?lastPlayStep:selectedStep,0,15),v=velocity>.82?3:velocity>.38?2:1;if(isPitchedTrack(tr)){addNote(tr,note,k,1,v);expandedTracks.add(selectedTrack)}else tr.steps[k].v=v;selectedStep=k;renderAll()}}
+async function performNote(note,velocity=.8){if(!await ensureAudio())return;const tr=tracks()[selectedTrack];syncTrackBuses();hit(ctx,tr,ctx.currentTime+.01,velocity,note,null,currentStepObj().slice||0,selectedTrack,tracks(),true,secondsPerStep());if(recordArm){checkpoint();const k=clamp(isPlaying?lastPlayStep:selectedStep,0,15),v=velocity>.82?3:velocity>.38?2:1;if(isPitchedTrack(tr)){addNote(tr,note,k,1,v);expandedTracks.add(selectedTrack)}else tr.steps[k].v=v;selectedStep=k;renderAll()}}
 const typingMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72};
 
 function init(){
