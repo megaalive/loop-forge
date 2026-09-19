@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.3 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.3.1 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.3 — track-aware inline editors ===== */
+/* ===== LOOPFORGE-16 v4.3.1 — blank-start usability pass ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -292,6 +292,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
       <div class="field"><span class="hide-sm">BPM</span><input id="bpm" type="number" min="40" max="240" value="112"></div>
       <div class="field"><span class="hide-sm">SWING</span><input id="swing" type="range" min="0" max="70" value="18"><span id="swingVal">18%</span></div>
       <button id="randomBtn" class="btn">New idea</button>
+      <button id="blankBtn" class="btn" title="Clear the current part and start empty">Blank loop</button>
       <button id="typingBtn" class="btn advanced-only">Keys</button>
       <button id="midiBtn" class="btn advanced-only">MIDI</button>
       <button id="undoBtn" class="btn advanced-only" title="Undo">↶</button>
@@ -586,6 +587,7 @@ function auditionSelectedStep(){ensureAudio();const tr=tracks()[selectedTrack],s
 function renderPiano(){const dock=$('#pianoDock');if(dock)dock.style.display='none'}
 
 function clearPattern(p=currentPattern){state.patterns[p].forEach(t=>{if(t.locked)return;t.steps.forEach(s=>Object.assign(s,stepTemplate()))})}
+function blankLoop(){const writable=tracks().filter(t=>!t.locked),hasNotes=writable.some(t=>t.steps.some(st=>st.v));if(!hasNotes)return toast('Loop is already blank');checkpoint();clearPattern();renderAll();toast(tracks().some(t=>t.locked)?'Blank loop · locked tracks kept':'Blank loop')}
 function setStep(t,k,v=2,p=1){const tr=tracks()[t];if(!tr||tr.locked)return;const s=tr.steps[(k+STEPS)%STEPS];s.v=Math.max(s.v,v);s.p=p}
 function generateIdea(){checkpoint();clearPattern();const g=$('#genre').value,d=(+$('#density').value)/100,kick=arr=>arr.forEach(x=>setStep(0,x,3)),snare=arr=>arr.forEach(x=>setStep(1,x,3));if(g==='Techno'||g==='House'){kick([0,4,8,12]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,2));if(g==='House')[3,7,11,15].forEach(x=>setStep(2,x,1,.75))}if(g==='Trap'){kick([0,7,10]);snare([4,12]);[...Array(16).keys()].forEach(x=>{if(x%2===0||chance(.35))setStep(2,x,1,x>11?.75:1)})}if(g==='Breakbeat'){kick([0,3,7,10,14]);snare([4,9,12]);[0,2,4,6,8,10,12,14].forEach(x=>setStep(2,x,1,.75))}if(g==='Funk'){kick([0,3,6,10,13]);snare([4,12,15]);[2,6,10,14].forEach(x=>setStep(2,x,2));[5,11].forEach(x=>setStep(5,x,2))}if(g==='Jaipongan-ish'){kick([0,6,8,13]);snare([4,12]);[1,3,5,7,9,11,14,15].forEach((x,j)=>setStep(j%2?5:6,x,j%3?2:3,j%4?.75:1));[2,10].forEach(x=>setStep(4,x,2))}if(g==='Minimal'){kick([0,8]);snare([4,12]);[2,6,10,14].forEach(x=>setStep(2,x,1,.5))}if(g==='Dark Ambient'){[0,5,11].forEach(x=>setStep(13,x,1,.75));[0,8].forEach(x=>setStep(9,x,2));[3,14].forEach(x=>setStep(14,x,1,.5))}for(let t=7;t<15;t++){const count=Math.round((g==='Dark Ambient'?1.4:2.8)*d+Math.random()*3);for(let j=0;j<count;j++){const kk=Math.floor(Math.random()*16);setStep(t,kk,1+Math.floor(Math.random()*3),chance(.22)?.75:1)}}for(let t=3;t<7;t++)for(let kk=0;kk<16;kk++)if(chance(d*.08))setStep(t,kk,1+Math.floor(Math.random()*2),chance(.3)?.5:1);renderAll();toast(`${g} idea generated`)}
 function applyEuclid(){checkpoint();const pulses=clamp(+$(`#euclidPulses`).value,0,16),n=clamp(+$(`#euclidSteps`).value,1,16),rot=+$(`#euclidRotate`).value||0,tr=tracks()[selectedTrack];tr.steps.forEach(s=>Object.assign(s,stepTemplate()));for(let i=0;i<n;i++){const prev=Math.floor(i*pulses/n),next=Math.floor((i+1)*pulses/n);if(next>prev){const idx=((i+rot)%n+n)%n;tr.steps[idx].v=2}}renderAll();toast(`Euclidean ${pulses}/${n} applied`)}
@@ -657,7 +659,7 @@ function init(){
   $('#metroBtn').onclick=()=>{metro=!metro;$('#metroBtn').classList.toggle('primary',metro)};
   $('#typingBtn').onclick=()=>{typingMode=!typingMode;$('#typingBtn').classList.toggle('primary',typingMode);toast(typingMode?'Keyboard notes on':'Keyboard notes off')};
   $('#midiBtn').onclick=enableMidi;$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
-  $('#swing').oninput=e=>$('#swingVal').textContent=e.target.value+'%';$('#randomBtn').onclick=generateIdea;$('#generateIdea').onclick=generateIdea;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;
+  $('#swing').oninput=e=>$('#swingVal').textContent=e.target.value+'%';$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;
   $('#previewSound').onclick=()=>{ensureAudio();const tr=tracks()[selectedTrack];hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)};$('#sampleFile').onchange=e=>e.target.files[0]&&loadSample(e.target.files[0]);
   $('#exportWavBtn').onclick=()=>exportWav().catch(e=>{console.error(e);toast('WAV export failed: '+e.message)});$('#stemWavBtn').onclick=()=>exportStem().catch(e=>{console.error(e);toast('Stem export failed: '+e.message)});
   $$('.patternbtn').forEach(b=>b.onclick=()=>switchPattern(b.dataset.pattern));$('#copyPattern').onclick=()=>{checkpoint();const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];state.patterns[n]=structuredClone(state.patterns[currentPattern]);switchPattern(n);toast(`Copied to pattern ${n}`)};
@@ -666,7 +668,7 @@ function init(){
   $$('.tab').forEach(b=>b.onclick=()=>{$$('.sidepanel').forEach(p=>p.style.display='none');$$('.tab').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.show).style.display='block';b.classList.add('active')});
   $('#saveLocal').onclick=()=>{localStorage.setItem('loopforge16-v4',JSON.stringify(projectData()));toast('Saved locally')};$('#loadLocal').onclick=()=>{const x=localStorage.getItem('loopforge16-v4')||localStorage.getItem('loopforge16-v3')||localStorage.getItem('loopforge16-v2')||localStorage.getItem('loopforge16');if(!x)return toast('No local project');try{applyProject(JSON.parse(x),true)}catch(e){toast(e.message)}};$('#exportJson').onclick=()=>download('loopforge16-v4-project.json',new Blob([JSON.stringify(projectData(),null,2)],{type:'application/json'}));$('#importJson').onchange=async e=>{try{checkpoint();applyProject(JSON.parse(await e.target.files[0].text()),true)}catch(err){toast(err.message)}};$('#clearProject').onclick=()=>{if(confirm('Clear all patterns?')){checkpoint();['A','B','C','D'].forEach(p=>state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i)));switchPattern('A');toast('Project cleared')}};
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.code==='Space'){e.preventDefault();isPlaying?stop():play();return}if(typingMode&&!e.ctrlKey&&!e.metaKey&&!e.repeat){const n=typingMap[e.key.toLowerCase()];if(n!=null){e.preventDefault();performNote(n,.82)}}});
-  history.length=0;future.length=0;generateIdea();history.length=0;future.length=0;
+  history.length=0;future.length=0;
 }
 init();
 })();
