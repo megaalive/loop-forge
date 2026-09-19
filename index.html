@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.5.8 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.5.9 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.5.8 — realtime mute/solo lifecycle ===== */
+/* ===== LOOPFORGE-16 v4.5.9 — reliable sample preview ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -651,6 +651,23 @@ function stopSoundPreview(update=true){
   if(src){try{src.onended=null;src.stop()}catch(_){ }try{src.disconnect()}catch(_){}}
   if(update)syncPreviewButton()
 }
+function previewSampleTrack(trackIndex,slice=null){
+  if(!ctx||ctx.state!=='running')return null;
+  const tr=tracks()[trackIndex],buf=sampleBuffers[trackIndex];
+  if(!tr||!buf)return null;
+  stopSoundPreview(false);
+  const src=ctx.createBufferSource(),gain=ctx.createGain(),pan=ctx.createStereoPanner?ctx.createStereoPanner():ctx.createGain();
+  src.buffer=buf;src.playbackRate.value=Math.pow(2,tr.tune/12);
+  gain.gain.value=Math.max(.0001,.9*tr.volume);
+  if(pan.pan)pan.pan.value=tr.pan;
+  src.connect(gain);gain.connect(pan);pan.connect(master);
+  previewSource=src;previewTrackIndex=trackIndex;syncPreviewButton();
+  src.onended=()=>{if(previewSource===src){previewSource=null;previewTrackIndex=-1;syncPreviewButton()}};
+  const when=ctx.currentTime+.015;
+  if(slice==null)src.start(when);
+  else{const dur=buf.duration/16,off=clamp(slice,0,15)*dur;src.start(when,off,dur)}
+  return src
+}
 function toggleTrackMute(tr,i){
   checkpoint();tr.mute=!tr.mute;
   if(tr.mute&&previewTrackIndex===i)stopSoundPreview(false);
@@ -768,7 +785,7 @@ function renderSeq(){
 function renderMixer(){const b=$('#mixerBody');b.innerHTML='';tracks().forEach((tr,i)=>{const r=document.createElement('div');r.className='mixer-row';r.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><input aria-label="volume" type="range" min="0" max="100" value="${Math.round(tr.volume*100)}"><input aria-label="pan" type="range" min="-100" max="100" value="${Math.round(tr.pan*100)}"><span title="${escHtml(tr.name)}">${escHtml(tr.name)}</span><button class="mini ${tr.mute?'on':''}">M</button><button class="mini warn ${tr.solo?'on':''}">S</button>`;const [vol,pan,m,so]=[r.children[1],r.children[2],r.children[4],r.children[5]];vol.onpointerdown=pan.onpointerdown=checkpoint;vol.oninput=()=>{tr.volume=vol.value/100;syncTrackBuses()};pan.oninput=()=>{tr.pan=pan.value/100;syncTrackBuses()};m.onclick=()=>toggleTrackMute(tr,i);so.onclick=()=>toggleTrackSolo(tr);b.appendChild(r)})}
 function renderSlicePads(){const root=$('#slicePads');root.innerHTML='';const tr=tracks()[selectedTrack],st=currentStepObj();for(let i=0;i<16;i++){const b=document.createElement('button');b.className='pad'+(tr.sliceMode&&st.slice===i?' active':'');b.textContent=String(i+1).padStart(2,'0');b.onclick=()=>{selectedStepObjAssignSlice(i,true)};root.appendChild(b)}}
 function selectedStepObjAssignSlice(i,preview){checkpoint();const tr=tracks()[selectedTrack],st=currentStepObj();tr.sliceMode=true;st.slice=i;$('#sampleMode').value='slice';renderAll();if(preview)auditionSlice(i)}
-async function auditionSlice(i){if(!await ensureAudio())return;const tr=tracks()[selectedTrack],buf=sampleBuffers[selectedTrack];if(!buf)return toast('Load a sample first');if(tr.mute)return toast('This track is muted');syncTrackBuses();const was=tr.sliceMode;tr.sliceMode=true;hit(ctx,tr,ctx.currentTime+.015,.9,tr.note,buf,i,selectedTrack,tracks(),true);tr.sliceMode=was}
+async function auditionSlice(i){if(!await ensureAudio())return;const tr=tracks()[selectedTrack];if(!sampleBuffers[selectedTrack])return toast('Load a sample first');if(tr.mute)return toast('This track is muted');previewSampleTrack(selectedTrack,i)}
 
 function syncSoundPanel(){const tr=tracks()[selectedTrack];$('#selectedName').textContent=tr.name;$('#trackName').value=tr.name;$('#trackRole').value=tr.role||defaultRoles[selectedTrack];$('#trackLock').value=String(!!tr.locked);const map={soundType:'type',tune:'tune',oscA:'oscA',oscB:'oscB',oscMix:'oscMix',fm:'fm',cutoff:'cutoff',resonance:'resonance',attack:'attack',decay:'decay',sustain:'sustain',release:'release'};Object.entries(map).forEach(([id,key])=>{const el=$('#'+id),v=tr[key];el.value=['oscMix','fm','sustain'].includes(id)?Math.round(v*100):['attack','decay','release'].includes(id)?Math.round(v*1000):v});$('#sampleMode').value=tr.sliceMode?'slice':'full';renderSlicePads()}
 function bindSound(){const transform={soundType:v=>v,tune:v=>+v,oscA:v=>v,oscB:v=>v,oscMix:v=>v/100,fm:v=>v/100,cutoff:v=>+v,resonance:v=>+v,attack:v=>v/1000,decay:v=>v/1000,sustain:v=>v/100,release:v=>v/1000};Object.entries(transform).forEach(([id,fn])=>{const el=$('#'+id);el.addEventListener('pointerdown',checkpoint);el.addEventListener('input',e=>{const key={soundType:'type'}[id]||id;tracks()[selectedTrack][key]=fn(e.target.value)})});$('#trackName').addEventListener('change',e=>{checkpoint();tracks()[selectedTrack].name=(e.target.value.trim()||names[selectedTrack]).slice(0,24);renderAll()});$('#trackRole').onchange=e=>{checkpoint();tracks()[selectedTrack].role=e.target.value;renderAll()};$('#trackLock').onchange=e=>{checkpoint();tracks()[selectedTrack].locked=e.target.value==='true';renderAll()};$('#sampleMode').onchange=e=>{checkpoint();tracks()[selectedTrack].sliceMode=e.target.value==='slice';renderAll()}}
@@ -842,7 +859,7 @@ function renderAll(){renderSeq();renderMixer();syncSoundPanel();syncStepPanel();
 
 function parseChain(){const a=$('#chain').value.toUpperCase().match(/[ABCD]/g);return a&&a.length?a:['A']}
 function switchPattern(p,rerender=true){if(!state.patterns[p])return;currentPattern=p;document.querySelectorAll('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));syncTrackBuses();updateTransportPosition();if(rerender)renderAll()}
-async function loadSample(file){stopSoundPreview();await ensureAudio();const ab=await file.arrayBuffer();sampleBuffers[selectedTrack]=await ctx.decodeAudioData(ab.slice(0));checkpoint();tracks()[selectedTrack].type='sample';tracks()[selectedTrack].sliceMode=true;$('#soundType').value='sample';renderAll();toast(`Sample loaded: ${file.name}`)}
+async function loadSample(file){stopSoundPreview();const trackIndex=selectedTrack;if(!await ensureAudio())return toast('Audio is blocked');const ab=await file.arrayBuffer(),decoded=await ctx.decodeAudioData(ab.slice(0));sampleBuffers[trackIndex]=decoded;checkpoint();const tr=tracks()[trackIndex];tr.type='sample';tr.sliceMode=false;selectedTrack=trackIndex;$('#soundType').value='sample';$('#sampleMode').value='full';renderAll();toast(`Sample loaded: ${file.name}`)}
 
 function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
 function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=cloneData(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
@@ -882,12 +899,13 @@ function init(){
     if(!await ensureAudio())return toast('Audio is blocked. Tap again.');
     const tr=tracks()[selectedTrack];
     if(tr.mute)return toast('This track is muted');
-    syncTrackBuses();
-    const src=hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true);
-    if(src&&tr.type==='sample'){
-      previewSource=src;previewTrackIndex=selectedTrack;syncPreviewButton();
-      src.onended=()=>{if(previewSource===src){previewSource=null;previewTrackIndex=-1;syncPreviewButton()}}
+    if(tr.type==='sample'){
+      if(!sampleBuffers[selectedTrack])return toast('Load a sample first');
+      previewSampleTrack(selectedTrack,tr.sliceMode?(currentStepObj().slice||0):null);
+      return
     }
+    syncTrackBuses();
+    hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)
   };$('#sampleFile').onchange=e=>e.target.files[0]&&loadSample(e.target.files[0]);
   $('#exportWavBtn').onclick=()=>exportWav().catch(e=>{console.error(e);toast('WAV export failed: '+e.message)});$('#stemWavBtn').onclick=()=>exportStem().catch(e=>{console.error(e);toast('Stem export failed: '+e.message)});
   $$('.patternbtn').forEach(b=>b.onclick=()=>switchPattern(b.dataset.pattern));$('#copyPattern').onclick=()=>{checkpoint();const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];state.patterns[n]=cloneData(state.patterns[currentPattern]);switchPattern(n);toast(`Copied to pattern ${n}`)};
