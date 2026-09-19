@@ -481,8 +481,9 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
             <button id="exportJson" class="btn">Download project</button>
             <label class="btn" style="text-align:center">Open project file<input id="importJson" type="file" accept=".json,application/json" hidden></label>
           </div>
+          <button id="shareLink" class="btn" style="width:100%;margin-top:8px">Copy share link</button>
           <button id="clearProject" class="btn danger" style="width:100%;margin-top:8px">Start over</button>
-          <p class="small">Project disimpan hanya di browser. Tidak ada telemetry dan tidak ada server. File audio sample tidak ditanam ke JSON/localStorage; load ulang sample setelah membuka project.</p>
+          <p class="small">Project disimpan hanya di browser. Tidak ada telemetry dan tidak ada server. File audio sample tidak ditanam ke JSON/localStorage; load ulang sample setelah membuka project. Share link menyimpan seluruh pola di URL.</p>
         </div>
       </section>
     </aside>
@@ -1026,6 +1027,17 @@ async function loadSample(file){stopSoundPreview();const trackIndex=selectedTrac
 
 function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
 function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=cloneData(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
+function shareUrl(){const enc=b64encode(JSON.stringify(projectData()));const base=(location.origin&&location.origin!=='null')?location.origin+location.pathname:location.href.split('#')[0];return{enc,url:base+'#p='+enc}}
+async function shareLink(){
+  try{
+    const {enc,url}=shareUrl();
+    try{history.replaceState(null,'','#p='+enc)}catch(_){}
+    let ok=false;
+    if(navigator.clipboard&&navigator.clipboard.writeText){try{await navigator.clipboard.writeText(url);ok=true}catch(_){}}
+    if(!ok){const ta=document.createElement('textarea');ta.value=url;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok=true}catch(_){}ta.remove()}
+    toast(ok?'Share link copied to clipboard':'Share link is in the address bar')
+  }catch(e){toast('Could not create link')}
+}
 function restoreInitialProject(){
   const fromHash=readHashProject();
   if(fromHash){try{restoring=true;applyProject(fromHash,false);toast('Loaded shared loop');return}catch(_){ }finally{restoring=false}}
@@ -1081,7 +1093,7 @@ function init(){
   $('#songMode').onclick=playChain;
   $('#pianoToggle').onclick=()=>toggleTrackNotes(selectedTrack);
   $$('.tab').forEach(b=>b.onclick=()=>selectTab(b.dataset.show));
-  $('#saveLocal').onclick=()=>{localStorage.setItem(LS_KEY,JSON.stringify(projectData()));toast('Saved locally')};$('#loadLocal').onclick=()=>{const x=localStorage.getItem(LS_KEY)||localStorage.getItem('loopforge16-v3')||localStorage.getItem('loopforge16-v2')||localStorage.getItem('loopforge16');if(!x)return toast('No local project');try{applyProject(JSON.parse(x),true)}catch(e){toast(e.message)}};$('#exportJson').onclick=()=>download(`loopforge16-v${APP_VERSION}-project.json`,new Blob([JSON.stringify(projectData(),null,2)],{type:'application/json'}));$('#importJson').onchange=async e=>{try{checkpoint('Open project');applyProject(JSON.parse(await e.target.files[0].text()),true)}catch(err){toast(err.message)}};$('#clearProject').onclick=()=>{if(confirm('Clear all patterns?')){checkpoint('Start over');['A','B','C','D'].forEach(p=>state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i)));switchPattern('A');toast('Project cleared')}};
+  $('#saveLocal').onclick=()=>{localStorage.setItem(LS_KEY,JSON.stringify(projectData()));toast('Saved locally')};$('#loadLocal').onclick=()=>{const x=localStorage.getItem(LS_KEY)||localStorage.getItem('loopforge16-v3')||localStorage.getItem('loopforge16-v2')||localStorage.getItem('loopforge16');if(!x)return toast('No local project');try{applyProject(JSON.parse(x),true)}catch(e){toast(e.message)}};$('#exportJson').onclick=()=>download(`loopforge16-v${APP_VERSION}-project.json`,new Blob([JSON.stringify(projectData(),null,2)],{type:'application/json'}));$('#importJson').onchange=async e=>{try{checkpoint('Open project');applyProject(JSON.parse(await e.target.files[0].text()),true)}catch(err){toast(err.message)}};$('#shareLink').onclick=shareLink;$('#clearProject').onclick=()=>{if(confirm('Clear all patterns?')){checkpoint('Start over');['A','B','C','D'].forEach(p=>state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i)));switchPattern('A');toast('Project cleared')}};
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}if(/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)||e.target.isContentEditable)return;if(e.code==='Space'){e.preventDefault();playCurrent();return}if(typingMode&&!e.ctrlKey&&!e.metaKey&&!e.repeat){const n=typingMap[e.key.toLowerCase()];if(n!=null){e.preventDefault();performNote(n,.82)}}});
   history.length=0;future.length=0;
 }
