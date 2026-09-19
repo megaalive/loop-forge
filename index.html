@@ -334,6 +334,8 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
       <button id="metroBtn" class="btn advanced-only">Metronome</button>
       <div class="field"><span class="hide-sm">BPM</span><input id="bpm" type="number" min="40" max="240" value="112"></div>
       <div class="field"><span class="hide-sm">SWING</span><input id="swing" type="range" min="0" max="70" value="18"><span id="swingVal">18%</span></div>
+      <div class="field advanced-only" title="Master echo send"><span>ECHO</span><input id="echo" type="range" min="0" max="100" value="0"><span id="echoVal">0%</span></div>
+      <button id="scBtn" class="btn advanced-only" title="Sidechain: kick ducks the bass">Duck</button>
       <button id="randomBtn" class="btn" title="Generate only the part you are viewing">New part</button>
       <button id="blankBtn" class="btn" title="Clear the current part and start empty">Blank loop</button>
       <button id="typingBtn" class="btn advanced-only">Keys</button>
@@ -522,6 +524,7 @@ let iosAudioBridge=null, iosAudioBridgeUrl=null;
 const noiseBufferCache=new WeakMap();
 let trackBuses=Array(TRACKS).fill(null), previewSource=null, previewTrackIndex=-1;
 let analyser=null, vizCtx=null, meterRAF=null, lastMeter=0;
+let echoSend=null, echoDelay=null, echoFb=null, echoWet=null, sidechain=false;
 const visualTimers=new Set();
 const LS_KEY='loopforge16-v4', LS_MODE='loopforge-mode';
 let autosaveTimer=null, restoring=false;
@@ -616,6 +619,11 @@ function createAudioContext(){
   ctx=new AC();
   master=ctx.createGain();master.gain.value=.82;master.connect(ctx.destination);
   analyser=ctx.createAnalyser();analyser.fftSize=128;master.connect(analyser);
+  echoSend=ctx.createGain();echoSend.gain.value=clamp((+$('#echo').value||0)/100,0,1);
+  echoDelay=ctx.createDelay(1.2);echoDelay.delayTime.value=.28;
+  echoFb=ctx.createGain();echoFb.gain.value=.34;
+  echoWet=ctx.createGain();echoWet.gain.value=.55;
+  master.connect(echoSend);echoSend.connect(echoDelay);echoDelay.connect(echoFb);echoFb.connect(echoDelay);echoDelay.connect(echoWet);echoWet.connect(ctx.destination);
   const vc=$('#viz');if(vc)vizCtx=vc.getContext('2d');
   trackBuses=Array(TRACKS).fill(null);
   if('onstatechange' in ctx)ctx.onstatechange=updateAudioStatus;
@@ -677,10 +685,10 @@ function makeNoiseBuffer(ac,dur=.3){let b=noiseBufferCache.get(ac);if(b)return b
 function getTrackBus(trackIndex){
   if(!ctx||trackIndex<0||trackIndex>=TRACKS)return null;
   if(trackBuses[trackIndex])return trackBuses[trackIndex];
-  const gain=ctx.createGain(),pan=ctx.createStereoPanner?ctx.createStereoPanner():ctx.createGain();
-  gain.gain.value=0;gain.connect(pan);pan.connect(master);
+  const gain=ctx.createGain(),duck=ctx.createGain(),pan=ctx.createStereoPanner?ctx.createStereoPanner():ctx.createGain();
+  gain.gain.value=0;duck.gain.value=1;gain.connect(duck);duck.connect(pan);pan.connect(master);
   let an=null;try{an=ctx.createAnalyser();an.fftSize=32;pan.connect(an)}catch(_){}
-  trackBuses[trackIndex]={gain,pan,analyser:an};return trackBuses[trackIndex]
+  trackBuses[trackIndex]={gain,duck,pan,analyser:an};return trackBuses[trackIndex]
 }
 function syncTrackBuses(){
   if(!ctx)return;
@@ -693,9 +701,20 @@ function syncTrackBuses(){
   })
 }
 function resetTrackBuses(){
-  trackBuses.forEach(bus=>{if(!bus)return;try{bus.gain.disconnect()}catch(_){}try{bus.pan.disconnect()}catch(_){}try{bus.analyser&&bus.analyser.disconnect()}catch(_){}});
+  trackBuses.forEach(bus=>{if(!bus)return;try{bus.gain.disconnect()}catch(_){}try{bus.duck&&bus.duck.disconnect()}catch(_){}try{bus.pan.disconnect()}catch(_){}try{bus.analyser&&bus.analyser.disconnect()}catch(_){}});
   trackBuses=Array(TRACKS).fill(null)
 }
+function duckBass(time){
+  if(!ctx)return;
+  const ts=tracks(),anySolo=ts.some(t=>t.solo),now=ctx.currentTime;
+  ts.forEach((tr,i)=>{
+    if((tr.role||'')!=='bass')return;
+    if(tr.mute||(anySolo&&!tr.solo))return;
+    const bus=getTrackBus(i);if(!bus||!bus.duck)return;
+    try{const g=bus.duck.gain;g.cancelScheduledValues(now);g.setValueAtTime(1,time);g.linearRampToValueAtTime(.3,time+.012);g.linearRampToValueAtTime(1,time+.24)}catch(_){}
+  })
+}
+function setEcho(v){if(echoSend)try{echoSend.gain.value=clamp(+v||0,0,1)}catch(_){}}
 function outChain(ac,tr,when,vel,trackIndex=-1){
   const gain=ac.createGain();gain.gain.setValueAtTime(Math.max(.0001,vel),when);
   if(ac===ctx&&trackIndex>=0){
@@ -768,7 +787,7 @@ function scheduleVisualAt(audioTime,fn){
 function clearVisualTimers(){visualTimers.forEach(id=>clearTimeout(id));visualTimers.clear()}
 function scheduleStep(step,time,pattern=playbackPattern){
   const sw=(+$('#swing').value||0)/100,base=time+((step%2)?secondsPerStep()*sw*.52:0),ts=state.patterns[pattern]||tracks();if(metro&&step%4===0)metroClick(ctx,base,step===0);
-  ts.forEach((tr,i)=>{if(isPitchedTrack(tr)){notesAtStart(tr,step).forEach(n=>{if(Math.random()>n.p)return;const t=Math.max(ctx.currentTime+.001,base+(n.shift||0)/1000);hit(ctx,tr,t,noteVelocity(n.velocity),n.pitch,null,0,i,ts,false,n.length*secondsPerStep())});return}const st=tr.steps[step];if(!st.v||Math.random()>st.p)return;const t=Math.max(ctx.currentTime+.001,base+(st.shift||0)/1000);hit(ctx,tr,t,[0,.45,.72,1][st.v],resolvedNote(tr,i,st,step),null,st.slice||0,i,ts)});
+  ts.forEach((tr,i)=>{if(isPitchedTrack(tr)){notesAtStart(tr,step).forEach(n=>{if(Math.random()>n.p)return;const t=Math.max(ctx.currentTime+.001,base+(n.shift||0)/1000);hit(ctx,tr,t,noteVelocity(n.velocity),n.pitch,null,0,i,ts,false,n.length*secondsPerStep())});return}const st=tr.steps[step];if(!st.v||Math.random()>st.p)return;const t=Math.max(ctx.currentTime+.001,base+(st.shift||0)/1000);hit(ctx,tr,t,[0,.45,.72,1][st.v],resolvedNote(tr,i,st,step),null,st.slice||0,i,ts);if(sidechain&&tr.type==='kick'&&!tr.mute&&(!ts.some(x=>x.solo)||tr.solo))duckBass(t)});
   scheduleVisualAt(base,()=>{if(currentPattern===pattern)paintPlayhead(step)});
 }
 function schedulerTick(){while(nextNoteTime<ctx.currentTime+.20){const pattern=playbackPattern;scheduleStep(currentStep,nextNoteTime,pattern);nextNoteTime+=secondsPerStep();currentStep++;if(currentStep>=STEPS){currentStep=0;if(songMode){const c=parseChain();chainPos=(chainPos+1)%c.length;const nextPattern=c[chainPos];playbackPattern=nextPattern;const boundary=nextNoteTime;scheduleVisualAt(boundary,()=>switchPattern(nextPattern,true))}}}}
@@ -1050,8 +1069,8 @@ function parseChain(){const a=$('#chain').value.toUpperCase().match(/[ABCD]/g);r
 function switchPattern(p,rerender=true){if(!state.patterns[p])return;closeStepPop();currentPattern=p;if(isPlaying&&!songMode)playbackPattern=p;document.querySelectorAll('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));syncTrackBuses();updateTransportPosition();if(rerender)renderAll()}
 async function loadSample(file){stopSoundPreview();const trackIndex=selectedTrack;if(!await ensureAudio())return toast('Audio is blocked');const ab=await file.arrayBuffer(),decoded=await ctx.decodeAudioData(ab.slice(0));sampleBuffers[trackIndex]=decoded;checkpoint('Load sample');const tr=tracks()[trackIndex];tr.noteEvents=[];tr.type='sample';tr.sliceMode=false;expandedTracks.delete(trackIndex);selectedTrack=trackIndex;$('#soundType').value='sample';$('#sampleMode').value='full';renderAll();toast(`Sample loaded: ${file.name}`)}
 
-function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
-function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=cloneData(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
+function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,echo:+$('#echo').value||0,duck:sidechain?1:0,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
+function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=cloneData(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#echo').value=p.echo??0;$('#echoVal').textContent=$('#echo').value+'%';setEcho((+$('#echo').value||0)/100);sidechain=!!p.duck;$('#scBtn').classList.toggle('primary',sidechain);$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
 function shareUrl(){const enc=b64encode(JSON.stringify(projectData()));const base=(location.origin&&location.origin!=='null')?location.origin+location.pathname:location.href.split('#')[0];return{enc,url:base+'#p='+enc}}
 async function shareLink(){
   try{
@@ -1140,7 +1159,7 @@ function init(){
   $('#metroBtn').onclick=()=>{metro=!metro;$('#metroBtn').classList.toggle('primary',metro)};
   $('#typingBtn').onclick=()=>{typingMode=!typingMode;$('#typingBtn').classList.toggle('primary',typingMode);toast(typingMode?'Keyboard notes on':'Keyboard notes off')};
   $('#audioBtn').onclick=async()=>{const ok=await ensureAudio();if(ok){audioProbe();toast('Audio enabled')}else toast('Audio is still blocked')};$('#midiBtn').onclick=enableMidi;$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
-  const checkpointTempo=e=>{if(e.type==='pointerdown'||['ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key))checkpoint()};$('#bpm').addEventListener('pointerdown',checkpointTempo);$('#bpm').addEventListener('keydown',checkpointTempo);$('#swing').addEventListener('pointerdown',checkpointTempo);$('#swing').addEventListener('keydown',checkpointTempo);$('#swing').oninput=e=>$('#swingVal').textContent=e.target.value+'%';$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#generateAll').onclick=generateAllParts;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;
+  const checkpointTempo=e=>{if(e.type==='pointerdown'||['ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key))checkpoint()};$('#bpm').addEventListener('pointerdown',checkpointTempo);$('#bpm').addEventListener('keydown',checkpointTempo);$('#swing').addEventListener('pointerdown',checkpointTempo);$('#swing').addEventListener('keydown',checkpointTempo);$('#swing').oninput=e=>$('#swingVal').textContent=e.target.value+'%';$('#echo').oninput=e=>{$('#echoVal').textContent=e.target.value+'%';setEcho(e.target.value/100)};$('#scBtn').onclick=()=>{sidechain=!sidechain;$('#scBtn').classList.toggle('primary',sidechain);toast(sidechain?'Sidechain on: kick ducks the bass':'Sidechain off')};$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#generateAll').onclick=generateAllParts;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;
   $('#previewSound').onclick=async()=>{
     if(previewSource){stopSoundPreview();return}
     if(!await ensureAudio())return toast('Audio is blocked. Tap again.');
