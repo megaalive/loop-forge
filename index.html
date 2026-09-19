@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.5.3 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.5.4 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.5.3 — realtime playback optimization ===== */
+/* ===== LOOPFORGE-16 v4.5.4 — transport UI/state audit ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -162,7 +162,7 @@ body.easy .tracklabel{gap:8px}
 .step.v2{background:var(--step-2);border-color:#4c7440}
 .step.v3{background:var(--step-3);border-color:#84c559;color:#0c1406}
 .step.selected-step{box-shadow:inset 0 0 0 2px var(--warn)}
-.step.playing{outline:2px solid var(--accent-2);outline-offset:1px}
+.step.playing{outline:2px solid var(--accent-2);outline-offset:1px;box-shadow:inset 0 0 0 1px rgba(92,214,240,.35)}
 
 /* ---------- generic form bits ---------- */
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
@@ -476,7 +476,7 @@ const keys=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const noteNames=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 function escHtml(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
-let ctx=null, master=null, scheduler=null, nextNoteTime=0, currentStep=0, lastPlayStep=0, isPlaying=false;
+let ctx=null, master=null, scheduler=null, nextNoteTime=0, currentStep=0, lastPlayStep=-1, isPlaying=false, isStarting=false, transportEpoch=0;
 let selectedTrack=0, selectedStep=0, currentPattern='A', songMode=false, chainPos=0, pianoOpen=false, pianoOctaveShift=0;
 let expandedTracks=new Set();
 let metro=false, recordArm=false, typingMode=false, midiAccess=null, clipboardStep=null;
@@ -633,16 +633,58 @@ function scheduleStep(step,time){
 function queuePatternRender(){if(patternRenderQueued)return;patternRenderQueued=true;requestAnimationFrame(()=>{patternRenderQueued=false;renderAll()})}
 function schedulerTick(){while(nextNoteTime<ctx.currentTime+.20){scheduleStep(currentStep,nextNoteTime);nextNoteTime+=secondsPerStep();currentStep++;if(currentStep>=STEPS){currentStep=0;if(songMode){const c=parseChain();chainPos=(chainPos+1)%c.length;switchPattern(c[chainPos],false);queuePatternRender()}}}}
 function updatePlaybackButtons(){
-  $('#playBtn').textContent=isPlaying?'Pause':'Play';
-  const all=$('#playAllBtn'),abcd=parseChain().join('')==='ABCD';if(all){all.textContent=isPlaying&&songMode&&abcd?'Playing A→D':'Play all';all.classList.toggle('primary',isPlaying&&songMode&&abcd)}
-  const chain=$('#songMode');if(chain){chain.textContent='Chain: '+(songMode?'on':'off');chain.classList.toggle('primary',songMode)}
+  const playBtn=$('#playBtn');
+  if(playBtn){
+    playBtn.textContent=isStarting?'Cancel':isPlaying?'Pause':'Play';
+    playBtn.setAttribute('aria-pressed',isPlaying?'true':'false')
+  }
+  const all=$('#playAllBtn'),abcd=parseChain().join('')==='ABCD';
+  if(all){
+    all.textContent=isStarting&&songMode&&abcd?'Starting…':isPlaying&&songMode&&abcd?'Playing A→D':'Play all';
+    all.classList.toggle('primary',(isPlaying||isStarting)&&songMode&&abcd);
+    all.setAttribute('aria-pressed',isPlaying&&songMode&&abcd?'true':'false')
+  }
+  const chain=$('#songMode');
+  if(chain){chain.textContent='Chain: '+(songMode?'on':'off');chain.classList.toggle('primary',songMode)}
 }
-async function play(){if(isPlaying)return;let ok=false;try{ok=await ensureAudio()}catch(e){console.error(e)}if(!ok){toast('Audio is blocked. Tap Play again in Safari.');updateAudioStatus();return}isPlaying=true;nextNoteTime=ctx.currentTime+.08;scheduler=setInterval(schedulerTick,50);updatePlaybackButtons();toast(songMode?'Playing '+parseChain().join(' → '):'Playing part '+currentPattern)}
-function stop(){if(isPlaying){isPlaying=false;clearInterval(scheduler);scheduler=null}currentStep=0;lastPlayStep=0;chainPos=0;paintPlayhead(-1);stopIOSMediaBridge();updatePlaybackButtons()}
-function playCurrent(){if(isPlaying){stop();return}songMode=false;chainPos=0;play()}
-function playChain(){if(isPlaying&&songMode){stop();songMode=false;updatePlaybackButtons();return}if(isPlaying)stop();const c=parseChain();songMode=true;chainPos=0;currentStep=0;switchPattern(c[0]);play()}
-function playAllParts(){if(isPlaying&&songMode&&parseChain().join('')==='ABCD'){stop();songMode=false;updatePlaybackButtons();return}if(isPlaying)stop();$('#chain').value='A B C D';songMode=true;chainPos=0;currentStep=0;switchPattern('A');play()}
-function paintPlayhead(step){const prev=lastPlayStep;if(prev>=0){$(`.step[data-step="${prev}"],.piano-cell[data-step="${prev}"]`).forEach(x=>x.classList.remove('playing'))}lastPlayStep=step;if(step>=0){$(`.step[data-step="${step}"],.piano-cell[data-step="${step}"]`).forEach(x=>x.classList.add('playing'))}}
+async function play(){
+  if(isPlaying||isStarting)return;
+  const epoch=++transportEpoch;
+  isStarting=true;updatePlaybackButtons();
+  let ok=false;
+  try{ok=await ensureAudio()}catch(e){console.error(e)}
+  if(epoch!==transportEpoch)return;
+  isStarting=false;
+  if(!ok){updatePlaybackButtons();toast('Audio is blocked. Tap Enable audio, then Play.');updateAudioStatus();return}
+  isPlaying=true;nextNoteTime=ctx.currentTime+.08;schedulerTick();scheduler=setInterval(schedulerTick,50);updatePlaybackButtons();
+  toast(songMode?'Playing '+parseChain().join(' → '):'Playing part '+currentPattern)
+}
+function stop(){
+  transportEpoch++;isStarting=false;
+  if(scheduler){clearInterval(scheduler);scheduler=null}
+  isPlaying=false;currentStep=0;chainPos=0;
+  paintPlayhead(-1);stopIOSMediaBridge();updatePlaybackButtons()
+}
+function playCurrent(){
+  if(isPlaying||isStarting){stop();return}
+  songMode=false;chainPos=0;play()
+}
+function playChain(){
+  if(isPlaying||isStarting){stop();if(songMode){songMode=false;updatePlaybackButtons();return}}
+  const c=parseChain();songMode=true;chainPos=0;currentStep=0;switchPattern(c[0]);play()
+}
+function playAllParts(){
+  const abcd=parseChain().join('')==='ABCD';
+  if((isPlaying||isStarting)&&songMode&&abcd){stop();songMode=false;updatePlaybackButtons();return}
+  if(isPlaying||isStarting)stop();
+  $('#chain').value='A B C D';songMode=true;chainPos=0;currentStep=0;switchPattern('A');play()
+}
+function paintPlayhead(step){
+  const prev=lastPlayStep;
+  if(prev>=0)$$(`.step[data-step="${prev}"],.piano-cell[data-step="${prev}"]`).forEach(x=>x.classList.remove('playing'));
+  lastPlayStep=step;
+  if(step>=0)$$(`.step[data-step="${step}"],.piano-cell[data-step="${step}"]`).forEach(x=>x.classList.add('playing'))
+}
 
 function migrateTrack(tr,i){const d=trackTemplate(i),hadEvents=Array.isArray(tr.noteEvents);for(const k of Object.keys(d))if(tr[k]===undefined)tr[k]=cloneData(d[k]);if(!tr.role)tr.role=defaultRoles[i];tr.locked=!!tr.locked;tr.steps=(tr.steps||[]).slice(0,STEPS);while(tr.steps.length<STEPS)tr.steps.push(stepTemplate());tr.steps=tr.steps.map(st=>({v:st.v||0,p:st.p??1,shift:st.shift||0,n:st.n??null,slice:st.slice||0}));tr.noteEvents=(tr.noteEvents||[]).map(n=>noteEvent(n.pitch??n.n??tr.note,n.start??0,n.length??1,n.velocity??n.v??2,n.p??1,n.shift??0)).filter(n=>n.start<STEPS);if(isPitchedTrack(tr)&&!hadEvents)tr.noteEvents=tr.steps.flatMap((st,k)=>st.v?[noteEvent(st.n??tr.note,k,1,st.v,st.p,st.shift)]:[]);return tr}
 function migrateState(){for(const p of ['A','B','C','D']){if(!state.patterns[p])state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i));state.patterns[p]=state.patterns[p].slice(0,TRACKS);while(state.patterns[p].length<TRACKS)state.patterns[p].push(trackTemplate(state.patterns[p].length));state.patterns[p]=state.patterns[p].map(migrateTrack)}}
