@@ -21,6 +21,7 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - simpan project di browser dan import/export JSON
 - export WAV dan stem
 - mode mudah untuk penggunaan langsung, serta kontrol lanjutan melalui tombol **More**
+- mulai dari loop kosong; tombol **New idea** tetap tersedia bila ingin dibuatkan pola awal
 
 ## Menjalankan
 
@@ -38,4 +39,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.3**.
+Versi saat ini: **4.3.1**.
