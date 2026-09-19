@@ -10,7 +10,7 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - pattern A/B/C/D dan song chain
 - velocity, probability, swing, dan microtiming
 - drum synth dan synth dua oscillator
-- piano roll sederhana
+- editor nada/piano roll inline untuk track bernada; drum/percussion tetap memakai step grid
 - sampler dengan 16 slice
 - mixer volume, pan, mute, dan solo
 - Euclidean rhythm dan humanize
@@ -38,4 +38,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.2.1**.
+Versi saat ini: **4.3**.
