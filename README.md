@@ -24,6 +24,7 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - mulai dari loop kosong; **New part** membuat pola hanya untuk part aktif
 - **Generate A–D** membuat A sebagai dasar lalu B/C/D sebagai variasi yang tetap dapat diedit
 - **Play all** memainkan A → B → C → D berurutan lalu mengulang
+- kompatibilitas iOS lama: Web Audio dibuka lewat gesture pengguna dan media channel fallback; Web MIDI tetap bergantung dukungan browser
 - pada piano roll: klik untuk tambah/hapus nada, drag horizontal untuk mengatur panjang nada
 
 ## Menjalankan
@@ -42,4 +43,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.5**.
+Versi saat ini: **4.5.2**.
