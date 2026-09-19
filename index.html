@@ -481,7 +481,7 @@ let expandedTracks=new Set();
 let metro=false, recordArm=false, typingMode=false, midiAccess=null, clipboardStep=null;
 let sampleBuffers=Array(TRACKS).fill(null), history=[], future=[];
 
-const cloneData=window.structuredClone?value=>window.cloneData(value):value=>JSON.parse(JSON.stringify(value));
+const cloneData=window.structuredClone?value=>window.structuredClone(value):value=>JSON.parse(JSON.stringify(value));
 function stepTemplate(){return {v:0,p:1,shift:0,n:null,slice:0}}
 function noteEvent(pitch,start,length=1,velocity=2,p=1,shift=0){return {pitch:clamp(Math.round(pitch),24,108),start:clamp(Math.round(start),0,15),length:clamp(Math.round(length),1,16),velocity:clamp(Math.round(velocity),1,3),p:clamp(+p||1,.01,1),shift:clamp(Math.round(shift||0),-80,80)}}
 function trackTemplate(i){
@@ -540,7 +540,7 @@ async function ensureAudio(){
   return ctx.state==='running'
 }
 function primeAudio(){ensureAudio().catch(()=>updateAudioStatus())}
-function mtof(function mtof(m){return 440*Math.pow(2,(m-69)/12)}
+function mtof(m){return 440*Math.pow(2,(m-69)/12)}
 function makeNoiseBuffer(ac,dur=.3){const b=ac.createBuffer(1,Math.ceil(ac.sampleRate*dur),ac.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;return b}
 function outChain(ac,tr,when,vel){const gain=ac.createGain(),pan=ac.createStereoPanner?ac.createStereoPanner():ac.createGain();gain.gain.setValueAtTime(Math.max(.0001,vel*tr.volume),when);if(pan.pan)pan.pan.setValueAtTime(tr.pan,when);gain.connect(pan);pan.connect(ac===ctx?master:ac.destination);return gain}
 
