@@ -245,6 +245,7 @@ details.morebox[open]>summary:after{content:'\2013'}
 details.morebox>.inside{padding:0 9px 9px}
 .toolline{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .badge{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 7px;color:var(--text-dim);font-size:10px}
+.wave{width:100%;display:block;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);margin-top:8px;cursor:crosshair}
 .padgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px}
 .pad{aspect-ratio:1.4;border:1px solid var(--border);background:var(--surface-2);color:var(--text-faint);border-radius:var(--radius-sm);font-size:11px}
 .pad:hover,.pad.active{border-color:var(--accent-2);color:var(--accent-2);background:var(--accent-2-soft)}
@@ -448,6 +449,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
           <div style="height:8px"></div>
           <label class="control">Load your sound<input id="sampleFile" type="file" accept="audio/*"></label>
           <label class="control" style="margin-top:8px">Play sample<select id="sampleMode"><option value="full">Whole sound</option><option value="slice">Cut into 16 pieces</option></select></label>
+          <canvas id="wave" class="wave" width="260" height="54" title="Click a slice to assign it to the current step"></canvas>
           <div id="slicePads" class="padgrid"></div>
           <button id="previewSound" class="btn big-action" style="margin-top:8px">Hear this sound</button>
 
@@ -851,11 +853,33 @@ function renderSeq(){
   });
 }
 function renderMixer(){const b=$('#mixerBody');b.innerHTML='';tracks().forEach((tr,i)=>{const r=document.createElement('div');r.className='mixer-row';r.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><input aria-label="volume" type="range" min="0" max="100" value="${Math.round(tr.volume*100)}"><input aria-label="pan" type="range" min="-100" max="100" value="${Math.round(tr.pan*100)}"><span title="${escHtml(tr.name)}">${escHtml(tr.name)}</span><button class="mini ${tr.mute?'on':''}">M</button><button class="mini warn ${tr.solo?'on':''}">S</button>`;const [vol,pan,m,so]=[r.children[1],r.children[2],r.children[4],r.children[5]];vol.onpointerdown=pan.onpointerdown=()=>checkpoint('Mix');vol.oninput=()=>{tr.volume=vol.value/100;syncTrackBuses()};pan.oninput=()=>{tr.pan=pan.value/100;syncTrackBuses()};m.onclick=()=>toggleTrackMute(tr,i);so.onclick=()=>toggleTrackSolo(tr);const vm=document.createElement('i');vm.className='vmeter';r.appendChild(vm);b.appendChild(r)})}
+function waveformPeaks(buf,width){
+  const cache=buf._peaks;
+  if(cache&&cache.width===width)return cache.data;
+  const data=buf.getChannelData(0),step=Math.max(1,Math.floor(data.length/width)),peaks=new Float32Array(width);
+  for(let i=0;i<width;i++){let mx=0;const s=i*step,e=Math.min(data.length,s+step);for(let j=s;j<e;j++){const v=Math.abs(data[j]);if(v>mx)mx=v}peaks[i]=mx}
+  try{buf._peaks={width,data:peaks}}catch(_){}
+  return peaks
+}
+function drawWaveform(){
+  const cv=$('#wave');if(!cv)return;
+  const c=cv.getContext('2d'),w=260,h=54;cv.width=w;cv.height=h;c.clearRect(0,0,w,h);
+  const buf=sampleBuffers[selectedTrack];
+  if(!buf){c.fillStyle='#5b616b';c.font='10px ui-monospace,monospace';c.fillText('No sample loaded',8,14);return}
+  const peaks=waveformPeaks(buf,w),mid=h/2;
+  c.fillStyle='#4f8a35';
+  for(let i=0;i<w;i++){const a=Math.max(1,peaks[i]*mid);c.fillRect(i,mid-a,1,a*2)}
+  c.strokeStyle='rgba(92,214,240,.35)';c.lineWidth=1;
+  for(let i=1;i<16;i++){const x=Math.round(i/16*w)+.5;c.beginPath();c.moveTo(x,0);c.lineTo(x,h);c.stroke()}
+  const st=currentStepObj();
+  if(st){const s=clamp(st.slice||0,0,15);c.fillStyle='rgba(160,239,99,.20)';c.fillRect(s/16*w,0,w/16,h)}
+  c.strokeStyle='rgba(255,255,255,.22)';c.beginPath();c.moveTo(0,mid+.5);c.lineTo(w,mid+.5);c.stroke();
+}
 function renderSlicePads(){const root=$('#slicePads');root.innerHTML='';const tr=tracks()[selectedTrack],st=currentStepObj();for(let i=0;i<16;i++){const b=document.createElement('button');b.className='pad'+(tr.sliceMode&&st.slice===i?' active':'');b.textContent=String(i+1).padStart(2,'0');b.onclick=()=>{selectedStepObjAssignSlice(i,true)};root.appendChild(b)}}
 function selectedStepObjAssignSlice(i,preview){checkpoint('Slice');const tr=tracks()[selectedTrack],st=currentStepObj();tr.sliceMode=true;st.slice=i;$('#sampleMode').value='slice';renderAll();if(preview)auditionSlice(i)}
 async function auditionSlice(i){if(!await ensureAudio())return;const tr=tracks()[selectedTrack];if(!sampleBuffers[selectedTrack])return toast('Load a sample first');if(tr.mute)return toast('This track is muted');previewSampleTrack(selectedTrack,i)}
 
-function syncSoundPanel(){const tr=tracks()[selectedTrack];$('#selectedName').textContent=tr.name;$('#trackName').value=tr.name;$('#trackRole').value=tr.role||defaultRoles[selectedTrack];$('#trackLock').value=String(!!tr.locked);const map={soundType:'type',tune:'tune',oscA:'oscA',oscB:'oscB',oscMix:'oscMix',fm:'fm',cutoff:'cutoff',resonance:'resonance',attack:'attack',decay:'decay',sustain:'sustain',release:'release'};Object.entries(map).forEach(([id,key])=>{const el=$('#'+id),v=tr[key];el.value=['oscMix','fm','sustain'].includes(id)?Math.round(v*100):['attack','decay','release'].includes(id)?Math.round(v*1000):v});$('#sampleMode').value=tr.sliceMode?'slice':'full';renderSlicePads()}
+function syncSoundPanel(){const tr=tracks()[selectedTrack];$('#selectedName').textContent=tr.name;$('#trackName').value=tr.name;$('#trackRole').value=tr.role||defaultRoles[selectedTrack];$('#trackLock').value=String(!!tr.locked);const map={soundType:'type',tune:'tune',oscA:'oscA',oscB:'oscB',oscMix:'oscMix',fm:'fm',cutoff:'cutoff',resonance:'resonance',attack:'attack',decay:'decay',sustain:'sustain',release:'release'};Object.entries(map).forEach(([id,key])=>{const el=$('#'+id),v=tr[key];el.value=['oscMix','fm','sustain'].includes(id)?Math.round(v*100):['attack','decay','release'].includes(id)?Math.round(v*1000):v});$('#sampleMode').value=tr.sliceMode?'slice':'full';renderSlicePads();drawWaveform()}
 function bindSound(){const transform={soundType:v=>v,tune:v=>+v,oscA:v=>v,oscB:v=>v,oscMix:v=>v/100,fm:v=>v/100,cutoff:v=>+v,resonance:v=>+v,attack:v=>v/1000,decay:v=>v/1000,sustain:v=>v/100,release:v=>v/1000};Object.entries(transform).forEach(([id,fn])=>{const el=$('#'+id);el.addEventListener('pointerdown',()=>checkpoint('Sound'));el.addEventListener('input',e=>{const key={soundType:'type'}[id]||id;tracks()[selectedTrack][key]=fn(e.target.value)})});$('#trackName').addEventListener('change',e=>{checkpoint('Rename');tracks()[selectedTrack].name=(e.target.value.trim()||names[selectedTrack]).slice(0,24);renderAll()});$('#trackRole').onchange=e=>{checkpoint('Role');tracks()[selectedTrack].role=e.target.value;renderAll()};$('#trackLock').onchange=e=>{checkpoint('Lock');tracks()[selectedTrack].locked=e.target.value==='true';renderAll()};$('#sampleMode').onchange=e=>{checkpoint('Sample mode');tracks()[selectedTrack].sliceMode=e.target.value==='slice';renderAll()}}
 
 function syncStepPanel(){const tr=tracks()[selectedTrack],pitched=isPitchedTrack(tr),st=currentStepObj();$('#stepTitle').textContent=pitched?'T'+String(selectedTrack+1).padStart(2,'0')+' / NOTES':'T'+String(selectedTrack+1).padStart(2,'0')+' / S'+String(selectedStep+1).padStart(2,'0');['stepVelocity','stepProb','stepShift','stepNote','stepSlice','clearStep','copyStep','pasteStep'].forEach(id=>$('#'+id).disabled=pitched);$('#stepVelocity').value=st.v;$('#stepProb').value=String(st.p);$('#stepShift').value=st.shift||0;$('#shiftVal').textContent=pitched?'use inline notes':(st.shift||0)+' ms';$('#stepNote').value=st.n==null?'':st.n;$('#stepSlice').value=(st.slice||0)+1}
@@ -1087,7 +1111,7 @@ function init(){
     }
     syncTrackBuses();
     hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)
-  };$('#sampleFile').onchange=e=>e.target.files[0]&&loadSample(e.target.files[0]);
+  };$('#sampleFile').onchange=e=>e.target.files[0]&&loadSample(e.target.files[0]);$('#wave').onclick=e=>{if(!sampleBuffers[selectedTrack])return;const rect=e.currentTarget.getBoundingClientRect();const s=clamp(Math.floor((e.clientX-rect.left)/rect.width*16),0,15);selectedStepObjAssignSlice(s,true)};
   $('#exportWavBtn').onclick=()=>exportWav().catch(e=>{console.error(e);toast('WAV export failed: '+e.message)});$('#stemWavBtn').onclick=()=>exportStem().catch(e=>{console.error(e);toast('Stem export failed: '+e.message)});
   $$('.patternbtn').forEach(b=>b.onclick=()=>switchPattern(b.dataset.pattern));$('#copyPattern').onclick=()=>{checkpoint('Copy pattern');const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];state.patterns[n]=cloneData(state.patterns[currentPattern]);switchPattern(n);toast(`Copied to pattern ${n}`)};
   $('#songMode').onclick=playChain;
