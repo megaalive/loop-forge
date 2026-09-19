@@ -261,6 +261,23 @@ details.morebox>.inside{padding:0 9px 9px}
 kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text);background:var(--surface-3);font:10px var(--mono)}
 .toast{position:fixed;right:14px;bottom:14px;z-index:99;background:var(--surface-3);border:1px solid var(--border-strong);border-radius:var(--radius);padding:9px 12px;max-width:320px;box-shadow:var(--shadow);display:none;font-size:12px;font-weight:600}
 
+/* ---------- step popover ---------- */
+.popover{position:fixed;z-index:120;width:240px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;font-size:12px}
+.pop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;color:var(--text);font-weight:700}
+.pop-close{border:0;background:transparent;color:var(--text-dim);font-size:16px;line-height:1;cursor:pointer;padding:0 2px}
+.pop-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0;color:var(--text-dim)}
+.pop-btns{display:flex;gap:3px}
+.pop-btns button{border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);border-radius:var(--radius-sm);padding:4px 7px;font-size:11px;font-weight:700;cursor:pointer}
+.pop-btns button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.pop-slider{display:grid;gap:3px;color:var(--text-dim);margin:8px 0;font-size:11px;font-weight:600}
+.pop-slider span{color:var(--text)}
+.pop-slider input{width:100%}
+.pop-row input[type=number]{width:66px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 6px;color:var(--text);font-weight:600}
+.pop-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:9px}
+.pop-actions button{border:1px solid var(--border);background:var(--surface-2);color:var(--text);border-radius:var(--radius-sm);padding:6px;font-size:11.5px;font-weight:700;cursor:pointer}
+.pop-actions button:hover{border-color:var(--border-strong);background:var(--surface-3)}
+.pop-actions button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
 /* ---------- easy / advanced mode ---------- */
 .more-toggle{margin-left:auto}
 .more-toggle.on{border-color:var(--accent-2);color:var(--accent-2)}
@@ -475,6 +492,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
   </footer>
 </div>
 <div class="toast" id="toast"></div>
+<div id="stepPop" class="popover" role="dialog" aria-label="Step editor" style="display:none"></div>
 
 <script>
 (() => {
@@ -492,7 +510,7 @@ function escHtml(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<
 let ctx=null, master=null, scheduler=null, nextNoteTime=0, currentStep=0, lastPlayStep=-1, isPlaying=false, isStarting=false, transportEpoch=0;
 let selectedTrack=0, selectedStep=0, currentPattern='A', playbackPattern='A', songMode=false, chainPos=0;
 let expandedTracks=new Set();
-let metro=false, recordArm=false, typingMode=false, midiAccess=null, clipboardStep=null;
+let metro=false, recordArm=false, typingMode=false, midiAccess=null, clipboardStep=null, popOpen=false;
 let sampleBuffers=Array(TRACKS).fill(null), history=[], future=[];
 let iosAudioBridge=null, iosAudioBridgeUrl=null;
 const noiseBufferCache=new WeakMap();
@@ -804,7 +822,7 @@ function beginNoteGesture(e,i,pitch,step){if(e.button!==0)return;e.preventDefaul
 function renderSeq(){
   const root=$('#seq');root.innerHTML='';const head=document.createElement('div');head.className='seq-head';head.innerHTML='<div>SOUND</div>'+Array.from({length:16},(_,i)=>'<div class="step-index" data-step="'+i+'" style="text-align:center">'+(i+1)+'</div>').join('');root.appendChild(head);
   tracks().forEach((tr,i)=>{const row=document.createElement('div');row.className='track'+(i===selectedTrack?' selected':'');row.classList.toggle('locked',!!tr.locked);row.dataset.role=tr.role||'';const lab=document.createElement('div');lab.className='tracklabel';const noteButton=isPitchedTrack(tr)?'<button class="mini pitch-toggle '+(expandedTracks.has(i)?'on':'')+'" data-act="notes" title="'+(expandedTracks.has(i)?'Hide':'Show')+' notes" aria-label="'+(expandedTracks.has(i)?'Hide':'Show')+' notes for '+escHtml(tr.name)+'">♪</button>':'';const sampleHint=(tr.type==='sample'&&!sampleBuffers[i])?'<button class="trackhint" data-act="load" title="No sample loaded yet — click to load one">load sample</button>':'';lab.innerHTML='<span class="tracknum">'+String(i+1).padStart(2,'0')+'</span><span class="trackname">'+escHtml(tr.name)+'</span><span class="trackrole">'+escHtml(tr.role||'')+'</span>'+sampleHint+'<span class="simple-track-actions">'+noteButton+'<button class="mini lock '+(tr.locked?'on':'')+'" data-act="lock" title="Lock this row">L</button><button class="mini '+(tr.mute?'on':'')+'" data-act="mute" title="Mute this row">M</button><button class="mini warn '+(tr.solo?'on':'')+'" data-act="solo" title="Hear only this row">S</button></span>';lab.addEventListener('click',e=>{if(e.target.dataset.act==='notes'){toggleTrackNotes(i);return}if(e.target.dataset.act==='load'){selectedTrack=i;selectTab('sound');renderAll();$('#sampleFile').click();return}if(e.target.dataset.act==='lock'){checkpoint('Lock');tr.locked=!tr.locked;renderAll();return}if(e.target.dataset.act==='mute'){toggleTrackMute(tr,i);return}if(e.target.dataset.act==='solo'||e.shiftKey){toggleTrackSolo(tr);return}selectedTrack=i;syncSoundPanel();syncStepPanel();renderAll()});row.appendChild(lab);
-    for(let k=0;k<STEPS;k++){const st=tr.steps[k],starts=isPitchedTrack(tr)?notesAtStart(tr,k):[],v=isPitchedTrack(tr)?(starts.length?Math.max(...starts.map(n=>n.velocity)):0):st.v,b=document.createElement('button');b.className='step '+(v?'v'+v:'')+(i===selectedTrack&&k===selectedStep?' selected-step':'');b.dataset.step=k;const fill=document.createElement('i');fill.className='fill';b.style.setProperty('--fill',Math.round(clamp(v,0,3)/3*100)+'%');b.appendChild(fill);b.dataset.prob=!isPitchedTrack(tr)&&st.p<1?Math.round(st.p*100)+'%':'';b.dataset.extra=isPitchedTrack(tr)?(starts.length>1?'×'+starts.length:starts.length===1?noteName(starts[0].pitch):''):(tr.type==='sample'&&tr.sliceMode?'S'+(st.slice+1):(st.shift?((st.shift>0?'+':'')+st.shift):''));b.setAttribute('aria-label',tr.name+', beat '+(k+1)+', '+(v?'on':'off'));b.title=isPitchedTrack(tr)?tr.name+' · step '+(k+1)+' · open notes':tr.name+' · beat '+(k+1);b.addEventListener('click',e=>{selectedTrack=i;selectedStep=k;if(isPitchedTrack(tr)){expandedTracks.add(i);renderAll();return}checkpoint('Step');if(e.shiftKey)st.v=st.v?((st.v%3)+1):1;else st.v=st.v?0:2;renderAll()});b.addEventListener('contextmenu',e=>{if(isPitchedTrack(tr))return;e.preventDefault();selectedTrack=i;selectedStep=k;checkpoint('Probability');st.p=({1:.75,.75:.5,.5:.25,.25:1})[st.p]||1;renderAll()});row.appendChild(b)}root.appendChild(row);if(expandedTracks.has(i)&&isPitchedTrack(tr))root.appendChild(renderInlinePiano(tr,i))
+    for(let k=0;k<STEPS;k++){const st=tr.steps[k],starts=isPitchedTrack(tr)?notesAtStart(tr,k):[],v=isPitchedTrack(tr)?(starts.length?Math.max(...starts.map(n=>n.velocity)):0):st.v,b=document.createElement('button');b.className='step '+(v?'v'+v:'')+(i===selectedTrack&&k===selectedStep?' selected-step':'');b.dataset.step=k;const fill=document.createElement('i');fill.className='fill';b.style.setProperty('--fill',Math.round(clamp(v,0,3)/3*100)+'%');b.appendChild(fill);b.dataset.prob=!isPitchedTrack(tr)&&st.p<1?Math.round(st.p*100)+'%':'';b.dataset.extra=isPitchedTrack(tr)?(starts.length>1?'×'+starts.length:starts.length===1?noteName(starts[0].pitch):''):(tr.type==='sample'&&tr.sliceMode?'S'+(st.slice+1):(st.shift?((st.shift>0?'+':'')+st.shift):''));b.setAttribute('aria-label',tr.name+', beat '+(k+1)+', '+(v?'on':'off'));b.title=isPitchedTrack(tr)?tr.name+' · step '+(k+1)+' · open notes':tr.name+' · beat '+(k+1);b.addEventListener('click',e=>{selectedTrack=i;selectedStep=k;if(isPitchedTrack(tr)){expandedTracks.add(i);renderAll();return}checkpoint('Step');if(e.shiftKey)st.v=st.v?((st.v%3)+1):1;else st.v=st.v?0:2;renderAll()});b.addEventListener('contextmenu',e=>{e.preventDefault();openStepPop(e.clientX,e.clientY,i,k)});row.appendChild(b)}root.appendChild(row);if(expandedTracks.has(i)&&isPitchedTrack(tr))root.appendChild(renderInlinePiano(tr,i))
   });
 }
 function renderMixer(){const b=$('#mixerBody');b.innerHTML='';tracks().forEach((tr,i)=>{const r=document.createElement('div');r.className='mixer-row';r.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><input aria-label="volume" type="range" min="0" max="100" value="${Math.round(tr.volume*100)}"><input aria-label="pan" type="range" min="-100" max="100" value="${Math.round(tr.pan*100)}"><span title="${escHtml(tr.name)}">${escHtml(tr.name)}</span><button class="mini ${tr.mute?'on':''}">M</button><button class="mini warn ${tr.solo?'on':''}">S</button>`;const [vol,pan,m,so]=[r.children[1],r.children[2],r.children[4],r.children[5]];vol.onpointerdown=pan.onpointerdown=()=>checkpoint('Mix');vol.oninput=()=>{tr.volume=vol.value/100;syncTrackBuses()};pan.oninput=()=>{tr.pan=pan.value/100;syncTrackBuses()};m.onclick=()=>toggleTrackMute(tr,i);so.onclick=()=>toggleTrackSolo(tr);b.appendChild(r)})}
@@ -818,6 +836,57 @@ function bindSound(){const transform={soundType:v=>v,tune:v=>+v,oscA:v=>v,oscB:v
 function syncStepPanel(){const tr=tracks()[selectedTrack],pitched=isPitchedTrack(tr),st=currentStepObj();$('#stepTitle').textContent=pitched?'T'+String(selectedTrack+1).padStart(2,'0')+' / NOTES':'T'+String(selectedTrack+1).padStart(2,'0')+' / S'+String(selectedStep+1).padStart(2,'0');['stepVelocity','stepProb','stepShift','stepNote','stepSlice','clearStep','copyStep','pasteStep'].forEach(id=>$('#'+id).disabled=pitched);$('#stepVelocity').value=st.v;$('#stepProb').value=String(st.p);$('#stepShift').value=st.shift||0;$('#shiftVal').textContent=pitched?'use inline notes':(st.shift||0)+' ms';$('#stepNote').value=st.n==null?'':st.n;$('#stepSlice').value=(st.slice||0)+1}
 function bindStepPanel(){const change=(id,fn)=>{$('#'+id).addEventListener('change',e=>{if(isPitchedTrack(tracks()[selectedTrack]))return;checkpoint('Step');fn(currentStepObj(),e.target.value);renderAll()})};change('stepVelocity',(st,v)=>st.v=+v);change('stepProb',(st,v)=>st.p=+v);$('#stepShift').addEventListener('pointerdown',()=>{if(!isPitchedTrack(tracks()[selectedTrack]))checkpoint('Shift')});$('#stepShift').addEventListener('input',e=>{if(isPitchedTrack(tracks()[selectedTrack]))return;currentStepObj().shift=+e.target.value;$('#shiftVal').textContent=e.target.value+' ms';renderSeq()});change('stepNote',(st,v)=>st.n=v===''?null:clamp(+v,24,108));change('stepSlice',(st,v)=>st.slice=clamp(+v-1,0,15));$('#clearStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;checkpoint('Clear step');Object.assign(currentStepObj(),stepTemplate());renderAll()};$('#copyStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;clipboardStep=cloneData(currentStepObj());toast('Step copied')};$('#pasteStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;if(!clipboardStep)return toast('Clipboard step empty');checkpoint('Paste step');Object.assign(currentStepObj(),cloneData(clipboardStep));renderAll()};$('#auditionStep').onclick=auditionSelectedStep}
 async function auditionSelectedStep(){if(!await ensureAudio())return toast('Audio is blocked. Tap again.');const tr=tracks()[selectedTrack];if(tr.mute)return toast('This track is muted');syncTrackBuses();if(isPitchedTrack(tr)){const ns=notesAtStart(tr,selectedStep);if(!ns.length)return toast('Add a note in the inline piano roll');ns.forEach(n=>hit(ctx,tr,ctx.currentTime+.015,noteVelocity(n.velocity),n.pitch,null,0,selectedTrack,tracks(),true,n.length*secondsPerStep()));return}const st=currentStepObj();hit(ctx,tr,ctx.currentTime+.015,[.5,.45,.72,1][st.v||2],resolvedNote(tr,selectedTrack,st,selectedStep),null,st.slice||0,selectedTrack,tracks(),true)}
+
+function closeStepPop(){const p=$('#stepPop');if(p)p.style.display='none';popOpen=false}
+function openStepPop(x,y,i,k){
+  const p=$('#stepPop');if(!p)return;
+  selectedTrack=i;selectedStep=k;popOpen=true;p.style.display='block';renderStepPop();
+  renderSeq();syncStepPanel();
+  const w=p.offsetWidth,h=p.offsetHeight;
+  p.style.left=Math.max(8,Math.min(x,window.innerWidth-w-8))+'px';
+  p.style.top=Math.max(8,Math.min(y,window.innerHeight-h-8))+'px';
+}
+function renderStepPop(){
+  const p=$('#stepPop');if(!p)return;
+  const tr=tracks()[selectedTrack],st=currentStepObj(),pitched=isPitchedTrack(tr);
+  const head='<div class="pop-head"><b>'+escHtml(tr.name)+' · S'+String(selectedStep+1).padStart(2,'0')+'</b><button class="pop-close" data-a="close" aria-label="Close">×</button></div>';
+  if(pitched){p.innerHTML=head+'<p class="small">Pitched track — add notes in the inline piano roll.</p><div class="pop-actions"><button data-a="notes">Open notes</button><button class="primary" data-a="audition">Audition</button></div>';return}
+  const vel=[['0','Off'],['1','Ghost'],['2','Normal'],['3','Accent']].map(([v,l])=>'<button data-vel="'+v+'" class="'+(st.v==+v?'on':'')+'">'+l+'</button>').join('');
+  const prob=[[1,'100'],[.75,'75'],[.5,'50'],[.25,'25']].map(([v,l])=>'<button data-prob="'+v+'" class="'+(st.p==v?'on':'')+'">'+l+'%</button>').join('');
+  p.innerHTML=head
+    +'<div class="pop-row"><span>Velocity</span><div class="pop-btns">'+vel+'</div></div>'
+    +'<div class="pop-row"><span>Chance</span><div class="pop-btns">'+prob+'</div></div>'
+    +'<label class="pop-slider">Shift <span data-shiftval>'+(st.shift||0)+' ms</span><input type="range" data-shift min="-80" max="80" value="'+(st.shift||0)+'"></label>'
+    +'<div class="pop-row"><span>Note</span><input type="number" data-note min="24" max="108" value="'+(st.n==null?'':st.n)+'" placeholder="auto"></div>'
+    +'<div class="pop-row"><span>Slice</span><input type="number" data-slice min="1" max="16" value="'+((st.slice||0)+1)+'"></div>'
+    +'<div class="pop-actions"><button data-a="clear">Clear</button><button data-a="copy">Copy</button><button data-a="paste">Paste</button><button class="primary" data-a="audition">Audition</button></div>'
+}
+function bindStepPop(){
+  const p=$('#stepPop');if(!p)return;
+  p.addEventListener('pointerdown',e=>{if(e.target.matches('input'))checkpoint('Step')});
+  p.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;const a=b.dataset.a,tr=tracks()[selectedTrack],st=currentStepObj();
+    if(a==='close'){closeStepPop();return}
+    if(b.dataset.vel!=null){checkpoint('Velocity');st.v=+b.dataset.vel;renderAll();renderStepPop();return}
+    if(b.dataset.prob!=null){checkpoint('Chance');st.p=+b.dataset.prob;renderAll();renderStepPop();return}
+    if(a==='clear'){checkpoint('Clear step');Object.assign(st,stepTemplate());renderAll();renderStepPop();return}
+    if(a==='copy'){clipboardStep=cloneData(st);toast('Step copied');return}
+    if(a==='paste'){if(!clipboardStep)return toast('Clipboard step empty');checkpoint('Paste step');Object.assign(st,cloneData(clipboardStep));renderAll();renderStepPop();return}
+    if(a==='audition'){auditionSelectedStep();return}
+    if(a==='notes'){expandedTracks.add(selectedTrack);closeStepPop();renderAll();return}
+  });
+  p.addEventListener('input',e=>{
+    const t=e.target,st=currentStepObj();
+    if(t.dataset.shift!=null){st.shift=+t.value;const s=p.querySelector('[data-shiftval]');if(s)s.textContent=t.value+' ms';renderSeq();return}
+    if(t.dataset.note!=null){st.n=t.value===''?null:clamp(+t.value,24,108);return}
+    if(t.dataset.slice!=null){st.slice=clamp(+t.value-1,0,15);return}
+  });
+  p.addEventListener('change',e=>{const t=e.target;if(t.dataset.note!=null||t.dataset.slice!=null){renderAll();renderStepPop()}});
+  document.addEventListener('pointerdown',e=>{if(popOpen&&!p.contains(e.target))closeStepPop()},true);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeStepPop()});
+  window.addEventListener('scroll',()=>closeStepPop(),true);
+  window.addEventListener('resize',()=>closeStepPop());
+}
 
 function clearPattern(p=currentPattern){state.patterns[p].forEach(tr=>{if(tr.locked)return;tr.steps.forEach(st=>Object.assign(st,stepTemplate()));tr.noteEvents=[]})}
 function blankLoop(){const ts=tracks(),hasContent=t=>t.steps.some(st=>st.v)||noteEvents(t).length,writable=ts.filter(t=>!t.locked),hasNotes=writable.some(hasContent),lockedHas=ts.some(t=>t.locked&&hasContent(t));if(!hasNotes)return toast(lockedHas?'Unlocked tracks are blank · locked tracks kept':'Loop is already blank');checkpoint('Blank loop');clearPattern();renderAll();toast(ts.some(t=>t.locked)?'Blank loop · locked tracks kept':'Blank loop')}
@@ -881,7 +950,7 @@ function buildSong(){generateAllParts()}
 function renderAll(){renderSeq();renderMixer();syncSoundPanel();syncStepPanel();syncPianoToggle();syncPreviewButton();if(isPlaying&&lastPlayStep>=0)paintPlayhead(lastPlayStep);scheduleAutosave()}
 
 function parseChain(){const a=$('#chain').value.toUpperCase().match(/[ABCD]/g);return a&&a.length?a:['A']}
-function switchPattern(p,rerender=true){if(!state.patterns[p])return;currentPattern=p;if(isPlaying&&!songMode)playbackPattern=p;document.querySelectorAll('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));syncTrackBuses();updateTransportPosition();if(rerender)renderAll()}
+function switchPattern(p,rerender=true){if(!state.patterns[p])return;closeStepPop();currentPattern=p;if(isPlaying&&!songMode)playbackPattern=p;document.querySelectorAll('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));syncTrackBuses();updateTransportPosition();if(rerender)renderAll()}
 async function loadSample(file){stopSoundPreview();const trackIndex=selectedTrack;if(!await ensureAudio())return toast('Audio is blocked');const ab=await file.arrayBuffer(),decoded=await ctx.decodeAudioData(ab.slice(0));sampleBuffers[trackIndex]=decoded;checkpoint('Load sample');const tr=tracks()[trackIndex];tr.noteEvents=[];tr.type='sample';tr.sliceMode=false;expandedTracks.delete(trackIndex);selectedTrack=trackIndex;$('#soundType').value='sample';$('#sampleMode').value='full';renderAll();toast(`Sample loaded: ${file.name}`)}
 
 function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
@@ -908,7 +977,7 @@ const typingMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:7
 
 function init(){
   setMode(localStorage.getItem(LS_MODE)!=='advanced');
-  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';migrateState();restoreInitialProject();bindSound();bindStepPanel();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
+  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';migrateState();restoreInitialProject();bindSound();bindStepPanel();bindStepPop();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
   if(!navigator.requestMIDIAccess){$('#midiBtn').disabled=true;$('#midiBtn').textContent='MIDI n/a';$('#midiBtn').title='Web MIDI is not supported by this browser'}
   document.addEventListener('pointerdown',primeAudio,{once:true,passive:true});
   document.addEventListener('touchend',primeAudio,{once:true,passive:true});
