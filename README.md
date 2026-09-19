@@ -32,6 +32,20 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - audit fungsional v4.6.0: SAMPLE tanpa buffer tetap senyap, playhead/chain memakai timer terkelola, lock konsisten, note events dibersihkan saat konversi ke sample, dan piano dock lama dihapus
 - pada piano roll: klik untuk tambah/hapus nada, drag horizontal untuk mengatur panjang nada
 
+## Baru di 4.7.0
+
+- **Autosave & restore**: project otomatis tersimpan di browser dan dipulihkan saat dibuka lagi; mode More/easy juga diingat
+- **Undo berlabel**: toast undo/redo menyebut aksi yang dibatalkan (mis. "Undo: Mute")
+- **Editor step popover**: klik-kanan (atau long-press) pada step membuka velocity, probability, microtiming, note, slice, copy/paste, dan audition tanpa pindah tab
+- **Paint gesture**: drag melintasi grid untuk menyalakan/mematikan banyak step; **Alt+drag** mengatur velocity secara vertikal; Shift+klik tetap memutar strength
+- **Master oscilloscope** di status bar dan **VU meter per track** di mixer
+- **Share link**: seluruh pola dikodekan ke URL (`#p=...`) dan bisa disalin lewat **Copy share link**
+- **Waveform sampler**: bentuk gelombang dengan 16 pembatas slice; klik area untuk menetapkan slice ke step aktif
+- **Export MIDI**: file `.mid` standar dari chain A–D, termasuk swing dan microtiming
+- **Master echo** (send delay) dan **sidechain Duck** (kick menekan bass) untuk kedalaman mix
+- **Forge flash**: step yang dihasilkan berkedip singkat sebagai umpan balik visual; chip prompt cepat di panel Idea
+- aksen warna per-role pada baris track dan indikator velocity di dalam step
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -48,4 +62,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.6.0**.
+Versi saat ini: **4.7.0**.
