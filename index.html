@@ -185,11 +185,7 @@ input[type=range]{padding:0!important;accent-color:var(--accent)}
 .mixer-row input[type=range]{width:100%}
 .mixer-row span{font-size:11px;color:var(--text-dim)}
 
-/* ---------- piano roll ---------- */
-.piano-wrap{overflow:auto;max-height:360px}
-.piano-grid{min-width:820px}
-.piano-row{display:grid;grid-template-columns:56px repeat(16,1fr);gap:3px;margin-bottom:3px}
-.piano-label{position:sticky;left:0;z-index:2;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:4px;color:var(--text-dim);text-align:right;font:10px var(--mono)}
+/* ---------- note cells ---------- */
 .piano-cell{height:19px;border:1px solid var(--border-soft);background:var(--surface-3);border-radius:4px}
 .piano-cell.black{background:var(--surface-2)}
 .piano-cell.on,.piano-cell.note-start{background:var(--step-3);border-color:#84c559}
@@ -334,13 +330,6 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
       <div class="sequence-wrap">
         <div class="seq" id="seq"></div>
       </div>
-      <section class="panel" id="pianoDock" style="display:none;margin-top:10px">
-        <h3>PIANO ROLL — <span id="pianoTrackName">TRACK</span> <span class="badge" id="pianoOctLabel">OCT</span></h3>
-        <div class="body">
-          <div class="toolline" style="margin-bottom:8px"><button id="pianoOctDown" class="btn">OCT −</button><button id="pianoOctUp" class="btn">OCT +</button><span class="small">Click a cell to place/remove a note. Velocity is edited in STEP.</span></div>
-          <div class="piano-wrap"><div id="pianoGrid" class="piano-grid"></div></div>
-        </div>
-      </section>
     </section>
 
     <aside class="sidebar">
@@ -470,7 +459,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const STEPS=16, TRACKS=16;
+const APP_VERSION='4.6.0', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -803,8 +792,6 @@ function syncStepPanel(){const tr=tracks()[selectedTrack],pitched=isPitchedTrack
 function bindStepPanel(){const change=(id,fn)=>{$('#'+id).addEventListener('change',e=>{if(isPitchedTrack(tracks()[selectedTrack]))return;checkpoint();fn(currentStepObj(),e.target.value);renderAll()})};change('stepVelocity',(st,v)=>st.v=+v);change('stepProb',(st,v)=>st.p=+v);$('#stepShift').addEventListener('pointerdown',()=>{if(!isPitchedTrack(tracks()[selectedTrack]))checkpoint()});$('#stepShift').addEventListener('input',e=>{if(isPitchedTrack(tracks()[selectedTrack]))return;currentStepObj().shift=+e.target.value;$('#shiftVal').textContent=e.target.value+' ms';renderSeq()});change('stepNote',(st,v)=>st.n=v===''?null:clamp(+v,24,108));change('stepSlice',(st,v)=>st.slice=clamp(+v-1,0,15));$('#clearStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;checkpoint();Object.assign(currentStepObj(),stepTemplate());renderAll()};$('#copyStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;clipboardStep=cloneData(currentStepObj());toast('Step copied')};$('#pasteStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;if(!clipboardStep)return toast('Clipboard step empty');checkpoint();Object.assign(currentStepObj(),cloneData(clipboardStep));renderAll()};$('#auditionStep').onclick=auditionSelectedStep}
 async function auditionSelectedStep(){if(!await ensureAudio())return toast('Audio is blocked. Tap again.');const tr=tracks()[selectedTrack];if(tr.mute)return toast('This track is muted');syncTrackBuses();if(isPitchedTrack(tr)){const ns=notesAtStart(tr,selectedStep);if(!ns.length)return toast('Add a note in the inline piano roll');ns.forEach(n=>hit(ctx,tr,ctx.currentTime+.015,noteVelocity(n.velocity),n.pitch,null,0,selectedTrack,tracks(),true,n.length*secondsPerStep()));return}const st=currentStepObj();hit(ctx,tr,ctx.currentTime+.015,[.5,.45,.72,1][st.v||2],resolvedNote(tr,selectedTrack,st,selectedStep),null,st.slice||0,selectedTrack,tracks(),true)}
 
-function renderPiano(){const dock=$('#pianoDock');if(dock)dock.style.display='none'}
-
 function clearPattern(p=currentPattern){state.patterns[p].forEach(tr=>{if(tr.locked)return;tr.steps.forEach(st=>Object.assign(st,stepTemplate()));tr.noteEvents=[]})}
 function blankLoop(){const writable=tracks().filter(t=>!t.locked),hasNotes=writable.some(t=>t.steps.some(st=>st.v)||noteEvents(t).length);if(!hasNotes)return toast('Loop is already blank');checkpoint();clearPattern();renderAll();toast(tracks().some(t=>t.locked)?'Blank loop · locked tracks kept':'Blank loop')}
 function setStep(t,k,v=2,p=1){const tr=tracks()[t];if(!tr||tr.locked)return;if(isPitchedTrack(tr)){const sc=scaleNotes($('#key').value,$('#scale').value),deg=(k+t)%sc.length,base=tr.role==='bass'?36:48,pitch=base+(t>10?12:0)+sc[deg];if(tr.role==='chord'){const third=base+sc[(deg+2)%sc.length]+((deg+2)>=sc.length?12:0),fifth=base+sc[(deg+4)%sc.length]+((deg+4)>=sc.length?12:0);[pitch,third,fifth].forEach(x=>addNote(tr,x,(k+STEPS)%STEPS,4,v,p,0))}else addNote(tr,pitch,(k+STEPS)%STEPS,1,v,p,0);return}const st=tr.steps[(k+STEPS)%STEPS];st.v=Math.max(st.v,v);st.p=p}
@@ -864,7 +851,7 @@ function fillGaps(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('
 function mutatePattern(p,seed,amount=.18){const ts=state.patterns[p],rng=seeded(seed);ts.forEach((tr,i)=>{if(tr.locked)return;if(isPitchedTrack(tr)){const sc=scaleNotes($('#key').value,$('#scale').value);noteEvents(tr).forEach(n=>{if(rng()>=amount)return;if(rng()<.3)n.velocity=clamp(n.velocity+(rng()<.5?-1:1),1,3);if(rng()<.3)n.length=clamp(n.length+(rng()<.5?-1:1),1,STEPS-n.start);if(rng()<.25)n.pitch=clamp(48+(i>10?12:0)+sc[Math.floor(rng()*sc.length)],24,108);if(rng()<.25)n.shift=Math.round((rng()*2-1)*14)});return}tr.steps.forEach(st=>{if(rng()>=amount)return;if(st.v&&rng()<.45)st.v=clamp(st.v+(rng()<.5?-1:1),1,3);else if(!st.v&&rng()<.45){st.v=1+Math.floor(rng()*2);st.p=rng()<.35?.75:1}if(rng()<.25)st.shift=Math.round((rng()*2-1)*14)})})}
 function variationToNext(){checkpoint();const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4],seed=(+$('#genSeed').value||0)^hash32($('#genPrompt').value+n);state.patterns[n]=cloneData(state.patterns[currentPattern]);mutatePattern(n,seed,.24);switchPattern(n);$('#genResult').textContent=`Variation created in ${n}; locked tracks preserved.`;toast(`Variation → ${n}`)}
 function buildSong(){generateAllParts()}
-function renderAll(){renderSeq();renderMixer();syncSoundPanel();syncStepPanel();syncPianoToggle();syncPreviewButton();renderPiano()}
+function renderAll(){renderSeq();renderMixer();syncSoundPanel();syncStepPanel();syncPianoToggle();syncPreviewButton();if(isPlaying&&lastPlayStep>=0)paintPlayhead(lastPlayStep)}
 
 function parseChain(){const a=$('#chain').value.toUpperCase().match(/[ABCD]/g);return a&&a.length?a:['A']}
 function switchPattern(p,rerender=true){if(!state.patterns[p])return;currentPattern=p;if(isPlaying&&!songMode)playbackPattern=p;document.querySelectorAll('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));syncTrackBuses();updateTransportPosition();if(rerender)renderAll()}
@@ -919,7 +906,7 @@ function init(){
   $('#exportWavBtn').onclick=()=>exportWav().catch(e=>{console.error(e);toast('WAV export failed: '+e.message)});$('#stemWavBtn').onclick=()=>exportStem().catch(e=>{console.error(e);toast('Stem export failed: '+e.message)});
   $$('.patternbtn').forEach(b=>b.onclick=()=>switchPattern(b.dataset.pattern));$('#copyPattern').onclick=()=>{checkpoint();const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];state.patterns[n]=cloneData(state.patterns[currentPattern]);switchPattern(n);toast(`Copied to pattern ${n}`)};
   $('#songMode').onclick=playChain;
-  $('#pianoToggle').onclick=()=>toggleTrackNotes(selectedTrack);$('#pianoOctDown').onclick=()=>{pianoOctaveShift=clamp(pianoOctaveShift-1,-3,3);renderPiano()};$('#pianoOctUp').onclick=()=>{pianoOctaveShift=clamp(pianoOctaveShift+1,-3,3);renderPiano()};
+  $('#pianoToggle').onclick=()=>toggleTrackNotes(selectedTrack);
   $$('.tab').forEach(b=>b.onclick=()=>{$$('.sidepanel').forEach(p=>p.style.display='none');$$('.tab').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.show).style.display='block';b.classList.add('active')});
   $('#saveLocal').onclick=()=>{localStorage.setItem('loopforge16-v4',JSON.stringify(projectData()));toast('Saved locally')};$('#loadLocal').onclick=()=>{const x=localStorage.getItem('loopforge16-v4')||localStorage.getItem('loopforge16-v3')||localStorage.getItem('loopforge16-v2')||localStorage.getItem('loopforge16');if(!x)return toast('No local project');try{applyProject(JSON.parse(x),true)}catch(e){toast(e.message)}};$('#exportJson').onclick=()=>download('loopforge16-v4.4-project.json',new Blob([JSON.stringify(projectData(),null,2)],{type:'application/json'}));$('#importJson').onchange=async e=>{try{checkpoint();applyProject(JSON.parse(await e.target.files[0].text()),true)}catch(err){toast(err.message)}};$('#clearProject').onclick=()=>{if(confirm('Clear all patterns?')){checkpoint();['A','B','C','D'].forEach(p=>state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i)));switchPattern('A');toast('Project cleared')}};
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.code==='Space'){e.preventDefault();playCurrent();return}if(typingMode&&!e.ctrlKey&&!e.metaKey&&!e.repeat){const n=typingMap[e.key.toLowerCase()];if(n!=null){e.preventDefault();performNote(n,.82)}}});
