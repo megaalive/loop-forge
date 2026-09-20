@@ -103,6 +103,11 @@ Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia 
 - **Lock selalu menang**; `preserve` dihormati.
 - **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
 
+### Perbaikan 4.9.4 (determinisme per-track)
+
+- **Dua track ber-role sama tidak lagi menghasilkan kandidat identik.** Dulu `genRoleTrack` dipanggil dengan `seeded(candSeed)` yang sama untuk setiap target, jadi bass 7 dan bass 8 (atau chord 9 dan chord 10) bisa dapat note/progresi identik dan saling menumpuk. Sekarang tiap track memakai child seed `candSeed ^ hash32('track|'+i+'|'+role)`: tetap reproducible untuk decision/project yang sama, tapi tidak identik antar-track.
+- **Blend rank memakai `candSeed`** (yang sengaja tidak memuat `variation`), sehingga proposal berbeda tidak selalu menyerang step/note yang sama, sementara sifat monotonic tetap utuh.
+
 ### Perbaikan 4.9.3 (mesin blend variation)
 
 - **Baseline kosong tidak lagi jadi saklar ON/OFF.** Dulu pitched track tanpa note langsung melompat ke kandidat penuh begitu `variation > 0`. Sekarang material kandidat masuk satu per satu sesuai ambang `variation`, jadi `0 → 0.1 → 0.3 → 1.0` benar-benar bertahap.
@@ -144,4 +149,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.9.3**.
+Versi saat ini: **4.9.4**.
