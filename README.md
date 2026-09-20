@@ -57,6 +57,14 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - **Performa**: oscilloscope dan VU meter hanya berjalan saat playing atau preview, dan berhenti saat tab tidak aktif.
 - Link share terkompresi memakai `deflate-raw`; browser tanpa `DecompressionStream` diberi pesan jelas alih-alih diam-diam membuka autosave.
 
+## Perbaikan 4.7.2
+
+- **Lock menutup celah keyboard**: aktivasi step via Space/Enter (`e.detail===0`) kini menghormati `tr.locked`, bukan hanya klik pointer.
+- **Parity level export**: `renderOffline` memakai gain master yang sama dengan realtime (0.82), jadi WAV/stem tidak lagi lebih keras dari yang terdengar saat Play.
+- **Stem bass mengikuti sidechain**: saat mengekspor stem bass (atau track lain) dengan Duck aktif, kick dari part lain memicu duck yang terdengar di bus, jadi stem mencerminkan mix terproses, bukan terisolasi-dry.
+- **Meter benar-benar start/stop**: loop `requestAnimationFrame` untuk oscilloscope/VU hanya hidup saat playing atau preview dan dihentikan saat Stop, tab disembunyikan, atau preview selesai.
+- Catatan desain: membuka shared link lalu tidak mengedit apa pun tidak menimpa project lokal (hash dibersihkan setelah dibaca, `restoring` mencegah autosave) — disengaja agar link orang lain aman dibuka.
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -73,4 +81,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.7.1**.
+Versi saat ini: **4.7.2**.
