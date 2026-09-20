@@ -65,6 +65,17 @@ Fresh audit menemukan lima bug lintas-state yang belum tertangkap suite; pass in
 - **Technical details tidak auto-open saat Ask.** `aiAsk()` mengisi `aiSent`/`aiProposal` mentah tetapi **tidak** memaksa disclosure terbuka; pilihan buka/tutup manual user dihormati. Kartu Proposal human-readable tetap primary.
 - **Version consistency:** `APP_VERSION` di-bump ke **4.11.1** (judul, komentar CSS, dan nama file export ikut konsisten otomatis). Project schema version tetap **5** (tidak diubah).
 
+#### Koreksi lanjutan 4.11.1 (control honesty / hidden dependency)
+
+Truth table diperluas dari *direct reads* ke **transitive reads** (call graph). Beberapa kontrol ternyata memengaruhi output lewat rantai fungsi, bukan dibaca di body handler teratas.
+
+- **Variation jujur soal Key/Scale.** `variationToNext()` → `mutatePattern()` → `mutateTrack()` → `scaleNotes($('#key'),$('#scale'))`, jadi pitched variation memang mengikuti Key/Scale. UI Variation kini menampilkan **Musical context (Key + Scale)** di samping From→To dan Similar↔Wild. Style/Density tetap tidak ditampilkan karena Variation tidak membacanya.
+- **Seed dipisahkan dari blok Local text** menjadi baris **Generation seed** sendiri di More & tools. Seed dibaca oleh `runGen()` (local text), `generateAllParts()` (A–D), `variationToNext()` (Variation) dan `fillGaps()`. Karena Fill gaps (tool yang selalu ada di Native) membacanya, field seed tetap tersedia di Native, dengan **hint yang eksplisit** menyebut operasi mana yang memakainya — sehingga field yang terlihat tidak pernah diam-diam diabaikan oleh CTA Generate.
+- **Local text kosong tidak lagi memajang kontrol yang diabaikan.** Saat textarea Local text **kosong**, `Change` **disembunyikan** (hanya `runGen()` yang membacanya) dan muncul hint *"Add text to use target-specific local generation."*. Saat teks **non-kosong**, `Change` muncul, Style + Simple↔Busy disembunyikan, dan muncul notice aktif. Mengosongkan kembali mengembalikan Style/Density dan routing `generateIdea()`. Mengetik saja tidak mengubah project.
+- **A–D menampilkan seluruh dependency transitifnya**: Style, Density (dibaca `populateCurrentIdea()`), Key, Scale, dan Seed — sementara blok Local text + Change tetap tersembunyi dan teks lama tidak relevan.
+- **Fill gaps tidak lagi bergantung pada hidden stale local text.** Karena `nativePrompt()` bergantung-pada-state (kosong di luar Native+New+Current), teks lokal yang tersembunyi tidak memengaruhi seed Fill gaps; output identik dengan/tanpa stale text.
+- Invariant tetap: algoritma musik tidak berubah; AI lifecycle, provider protocol, key storage, LocalExecutor, AI schema, transport BPM, audio, WAV/MIDI, dan schema project/share/export tidak disentuh. `APP_VERSION` tetap **4.11.1**.
+
 ### Baru di 4.11.0 (Generator dialog)
 
 - **Satu entry point**: tombol **Generate** di topbar (menggantikan "New part"). Tombol **Blank loop** tetap.

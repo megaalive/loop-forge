@@ -611,11 +611,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
                 <label class="control">Simple ↔ Busy<input id="density" type="range" min="10" max="90" value="50"></label>
               </div>
             </div>
-            <div class="row">
-              <label class="control">Key<select id="key"></select></label>
-              <label class="control">Scale<select id="scale"><option>Minor</option><option>Major</option><option>Dorian</option><option>Phrygian</option><option>Pentatonic</option></select></label>
-            </div>
-            <div class="gen-hint">Pick a style, press Generate. No prompt needed — the local engine writes it offline.</div>
+            <div class="gen-hint" id="genNewHint">Pick a style, press Generate. No prompt needed — the local engine writes it offline.</div>
           </div>
 
           <!-- Variation -->
@@ -625,6 +621,18 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
             <div class="kv"><span>Into</span><b id="genVarTo">B</b></div>
             <label class="control" style="margin-top:8px">Similar ↔ Wild <span id="variVal">40%</span><input id="variAmount" type="range" min="0" max="100" value="40"></label>
             <div class="gen-hint">Creates a variation of the current part as the next part (A→B→C→D→A) and switches to it. Locked tracks are preserved.</div>
+            <div class="gen-hint">Pitched variations follow Key and Scale below; Similar↔Wild sets how far it drifts. Seed (in More) reproduces the same variation.</div>
+          </div>
+
+          <!-- Musical context (shared): read transitively by generateIdea/generateAllParts
+               (setStep->scaleNotes) and by Variation (mutateTrack->scaleNotes). Shown for any
+               Native operation that actually reads it. -->
+          <div class="gen-sec" id="genKeyScaleRow">
+            <div class="gen-h">Musical context</div>
+            <div class="row">
+              <label class="control">Key<select id="key"></select></label>
+              <label class="control">Scale<select id="scale"><option>Minor</option><option>Major</option><option>Dorian</option><option>Phrygian</option><option>Pentatonic</option></select></label>
+            </div>
           </div>
         </div>
 
@@ -678,22 +686,34 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
         <!-- ============ MORE / TOOLS (shared, collapsed) ============ -->
         <details class="morebox" id="genMore"><summary>More &amp; tools</summary><div class="inside">
           <div id="genMoreNative">
-            <div class="gen-h">Local text idea (Native)</div>
-            <label class="control">Prompt<textarea id="genPromptLocal" rows="2" placeholder="dark sparse bass; keep the drums"></textarea></label>
-            <div class="row" style="margin-top:6px">
-              <label class="control">Change<select id="genTarget">
-                <option value="selected">Selected track</option>
-                <option value="drums">Drums</option>
-                <option value="bass">Bass</option>
-                <option value="harmony">Harmony</option>
-                <option value="melody">Melody / arp</option>
-                <option value="texture">Texture / FX</option>
-                <option value="full">All unlocked tracks</option>
-              </select></label>
-              <label class="control">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label>
+            <div id="genLocalBlock">
+              <div class="gen-h">Local text idea (Native)</div>
+              <label class="control">Prompt<textarea id="genPromptLocal" rows="2" placeholder="dark sparse bass; keep the drums"></textarea></label>
+              <!-- Change is read by runGen() ONLY, so it appears only when local text is non-empty. -->
+              <div class="row" id="genTargetRow" style="margin-top:6px;display:none">
+                <label class="control">Change<select id="genTarget">
+                  <option value="selected">Selected track</option>
+                  <option value="drums">Drums</option>
+                  <option value="bass">Bass</option>
+                  <option value="harmony">Harmony</option>
+                  <option value="melody">Melody / arp</option>
+                  <option value="texture">Texture / FX</option>
+                  <option value="full">All unlocked tracks</option>
+                </select></label>
+              </div>
+              <div class="gen-inline" id="genLocalActive">Local text idea is active — Generate will use this text and Change target instead of Style/Simple↔Busy.</div>
+              <div class="gen-inline" id="genLocalIdleHint">Add text to use target-specific local generation.</div>
             </div>
-            <div class="gen-inline" id="genLocalActive">Local text idea is active — Generate will use this text and the Change target instead of Style/Simple↔Busy.</div>
-            <div class="gen-hint">Available only for New idea on the current part. Leave it empty to use the Style sliders.</div>
+          </div>
+          <!-- Seed: an advanced generation/tool parameter. It is read by runGen() (local text),
+               generateAllParts() (A–D), variationToNext() (Variation) and fillGaps(). Because the
+               Fill gaps tool (always present in Native) reads it, the field stays available in
+               Native; the hint below says exactly which operations consume it so a visible field
+               is never silently ignored. -->
+          <div id="genSeedRow" style="display:none">
+            <div class="gen-h" style="margin-top:10px">Generation seed</div>
+            <label class="control" style="max-width:220px">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label>
+            <div class="gen-hint" id="genSeedHint"></div>
           </div>
           <div class="gen-h" style="margin-top:10px">Track tools (selected track)</div>
           <div class="row"><label class="control">Pulses<input id="euclidPulses" type="number" min="0" max="16" value="5"></label><label class="control">Steps<input id="euclidSteps" type="number" min="1" max="16" value="16"></label></div>
@@ -2229,22 +2249,40 @@ function syncGenUI(){
   if(scopeSec)scopeSec.style.display=(!llm&&isVar)?'none':'';
   const newUI=$('#genNewUI');if(newUI)newUI.style.display=(!llm&&genMode==='new')?'':'none';
   const varUI=$('#genVarUI');if(varUI)varUI.style.display=isVar?'':'none';
-  // Native-only generation controls inside More stay hidden while LLM is selected;
-  // the shared track tools (Euclid/Humanize/Fill gaps) remain available.
-  // The local-text block is authoritative ONLY in Native + New idea + Current, so
-  // hide it (and its Change target) everywhere else instead of letting hidden stale
-  // text look like it still matters.
+  // Musical context (Key/Scale) is read transitively by generateIdea/generateAllParts via
+  // setStep->scaleNotes AND by Variation via mutateTrack->scaleNotes, so it is visible for
+  // any Native operation that uses it. (LLM shows its own read-only context line.)
+  const keyScaleRow=$('#genKeyScaleRow');if(keyScaleRow)keyScaleRow.style.display=llm?'none':'';
+  // The local-text block is authoritative ONLY in Native + New idea + Current, so it is
+  // hidden everywhere else instead of letting hidden stale text look like it still matters.
   const moreNative=$('#genMoreNative');
   const localActive=nativeLocalTextActive();
   if(moreNative)moreNative.style.display=localActive?'':'none';
-  const localNotice=$('#genLocalActive');
   const localTextOn=localActive&&nativeLocalTextRaw().length>0;
+  const localNotice=$('#genLocalActive');
   if(localNotice)localNotice.classList.toggle('show',localTextOn);
+  // Change is read by runGen() ONLY, so it appears only with non-empty local text.
+  const targetRow=$('#genTargetRow');if(targetRow)targetRow.style.display=localTextOn?'':'none';
+  // Idle hint explains why Change/Seed are not shown yet when the block is visible but empty.
+  const idleHint=$('#genLocalIdleHint');
+  if(idleHint)idleHint.classList.toggle('show',localActive&&!localTextOn);
+  const newHint=$('#genNewHint');if(newHint)newHint.style.display=localTextOn?'none':'';
   // When the local-text path is active, runGen() reads the text + Change target and
   // IGNORES Style/Simple↔Busy. Showing them "as if active" would be dishonest, so
   // hide that Feel row entirely while the local-text path is in charge.
   const feelRow=$('#genFeelRow');
-  if(feelRow)feelRow.style.display=localTextOn?'none':'';
+  if(feelRow)feelRow.style.display=(localActive&&localTextOn)?'none':'';
+  // Seed is read by runGen() (local text), generateAllParts() (A–D), variationToNext()
+  // (Variation) and fillGaps() (always available in Native). It is therefore available
+  // in every Native state; the hint spells out which operations consume it so the field
+  // is never silently ignored by the primary Generate CTA.
+  const scope=genScope();
+  const seedReadByCTA=!llm&&(genMode==='variation'||(genMode==='new'&&(scope==='all'||localTextOn)));
+  const seedRow=$('#genSeedRow');if(seedRow)seedRow.style.display=llm?'none':'';
+  const seedHint=$('#genSeedHint');
+  if(seedHint)seedHint.textContent=seedReadByCTA
+    ? 'Used by this operation. Same seed + same settings reproduces the same result.'
+    : 'Not used by this Generate (New idea follows Style/Simple↔Busy). Used by A–D, Variation and Fill gaps.';
   $$('#genMode button').forEach(b=>{const on=b.dataset.mode===genMode;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false')});
   const from=$('#genVarFrom'),to=$('#genVarTo');
   if(from)from.textContent=currentPattern;
