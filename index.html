@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.10.0 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.10.1 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.10.0 — multi-provider AI ===== */
+/* ===== LOOPFORGE-16 v4.10.1 — preserve semantics ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -555,7 +555,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.10.0', STEPS=16, TRACKS=16;
+const APP_VERSION='4.10.1', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1415,14 +1415,16 @@ const AI_STYLES=['Techno','House','Dark Ambient','Breakbeat','Trap','Funk','Jaip
 const AI_ROLES=['kick','snare','hat','perc','bass','chord','melody','arp','texture','fx','sample'];
 // Preserve namespace: a token is EITHER a role OR a group, never both.
 // melody/arp/texture/fx are always single roles; only the group tokens expand.
-const AI_GROUP_TOKENS=['drums','bass','harmony','melodic','texture_fx','all'];
+// NOTE: there is deliberately NO 'all' token. In Mode 1 `target` is always
+// required, so preserve:'all' would always contradict the target and has no
+// healthy use. Preserve tokens are role names or these groups only.
+const AI_GROUP_TOKENS=['drums','bass','harmony','melodic','texture_fx'];
 const AI_GROUP_ROLES={
   drums:['kick','snare','hat','perc'],
   bass:['bass'],
   harmony:['chord'],
   melodic:['melody','arp'],
-  texture_fx:['texture','fx'],
-  all:AI_ROLES
+  texture_fx:['texture','fx']
 };
 function rolesForSpec(spec){return AI_GROUP_ROLES[spec]?AI_GROUP_ROLES[spec].slice():[spec]}
 function isKnownPreserveSpec(spec){return AI_ROLES.includes(spec)||AI_GROUP_TOKENS.includes(spec)}
@@ -1476,8 +1478,18 @@ function aiSystemPrompt(){
     +'You never write notes or rhythms yourself. Reply with ONE JSON object and nothing else.\n'
     +'Schema: {"action":"reshape","target":"drums|bass|harmony|melody","style":"<one of: '+AI_STYLES.join('|')+'">,'
     +'"density":0..1,"syncopation":0..1,"humanizeMs":0..40,"variation":0..1,"preserve":[<roles: '+AI_ROLES.join('|')+'> or <groups: '+AI_GROUP_TOKENS.join('|')+'>]}\n'
-    +'No extra keys. density = how busy, syncopation = off-beat push, variation = how far from the current pattern (0 keeps it almost identical, 1 rewrites it), preserve = roles/groups the user asked to keep. '
-    +'Group tokens: drums=kick+snare+hat+perc, bass=bass, harmony=chord, melodic=melody+arp, texture_fx=texture+fx, all=every role.'
+    +'No extra keys. density = how busy, syncopation = off-beat push, variation = how far from the current pattern (0 keeps it almost identical, 1 rewrites it).\n'
+    +'Group tokens (preserve only): drums=kick+snare+hat+perc, bass=bass, harmony=chord, melodic=melody+arp, texture_fx=texture+fx. There is no "all" token.\n'
+    +'PRESERVE RULES — follow exactly:\n'
+    +'- preserve MUST be [] by default. An empty array is the normal, expected answer.\n'
+    +'- Put something in preserve ONLY when the user explicitly asks to keep / preserve / not change / leave alone a specific part (words like "keep", "preserve", "don\'t change", "keep the kick", "jangan ubah bass").\n'
+    +'- NEVER invent preserve entries from context, mood, or your own judgement.\n'
+    +'- NEVER preserve the whole target you are reshaping — that would make the request contradictory. The target must stay writable.\n'
+    +'- Examples:\n'
+    +'  Request "music jaipongan" -> preserve:[]\n'
+    +'  Request "music jaipongan, don\'t change the bass" -> preserve:["bass"]\n'
+    +'  Request "make drums more jaipong, keep the kick" -> target:"drums", preserve:["kick"]\n'
+    +'  Request that would yield target:"drums", preserve:["drums"] is CONTRADICTORY and must never be produced.'
 }
 function aiStateSummary(){
   const ts=tracks(),anySolo=ts.some(t=>t.solo);
@@ -1549,6 +1561,20 @@ function semanticTargetIndexes(target,preserveSet){
   });
   return out
 }
+// Semantic validation, run AFTER the structural AIValidator. It expands target
+// and preserve into role sets and checks that at least one target track is
+// actually writable — accounting for both preserve and real Lock. Partial
+// overlap is fine (target drums + preserve kick => hat/perc still writable).
+function AISemanticValidate(d){
+  const targetRoles=AI_TARGET_ROLES[d.target];
+  if(!targetRoles)return {ok:false,error:'Unknown target'};
+  const preserveSet=expandPreserve(d.preserve);
+  const allPreserved=targetRoles.every(r=>preserveSet.has(r));
+  if(allPreserved)return {ok:false,error:'Model proposed a target that is fully preserved/locked — ask again.'};
+  const writable=semanticTargetIndexes(d.target,preserveSet);
+  if(!writable.length)return {ok:false,error:'Model proposed a target that is fully preserved/locked — ask again.'};
+  return {ok:true,writable,preserveSet}
+}
 let aiProposal=null,aiAbort=null,aiRequestId=0;
 function aiDecisionToIntent(d){
   return {style:d.style,density:d.density,sync:d.syncopation,dark:d.style==='Dark Ambient'?.8:.5,soft:.45,human:clamp(Math.round(d.humanizeMs),0,40),q:''}
@@ -1566,7 +1592,9 @@ function localExecutorApply(p){
   const d=p&&p.decision?p.decision:p;
   const preserveSet=expandPreserve(d.preserve);
   const ids=semanticTargetIndexes(d.target,preserveSet);
-  if(!ids.length)return {applied:0,reason:'No writable target (locked or all preserved)'};
+  // Preserve is user-authority: if the decision is contradictory we reject, we do
+  // NOT silently strip the preserve the user asked for.
+  if(!ids.length)return {applied:0,reason:'Model proposed a target that is fully preserved/locked — ask again.'};
   checkpoint('AI reshape');
   const intent=aiDecisionToIntent(d),ts=tracks(),v=clamp01(d.variation);
   // Candidate must be identical for a given decision EXCEPT variation — otherwise the
@@ -1733,8 +1761,15 @@ async function aiAsk(){
     const parsed=extractJson(content);
     const v=AIValidator(parsed);
     if(!v.ok){$('#aiProposal').textContent='Rejected by validator: '+v.error;setAiStatus('Model output rejected — nothing applied. You can use the local generator instead.',true);return}
+    // Semantic check BEFORE enabling Apply: never show an impossible proposal as apply-able.
+    const sem=AISemanticValidate(v.decision);
+    if(!sem.ok){
+      $('#aiProposal').textContent=describeDecision(v.decision)+'\n\nRejected: '+sem.error;
+      setAiStatus(sem.error,true);
+      aiProposal=null;$('#aiApply').disabled=true;return
+    }
     aiProposal={decision:v.decision,context};
-    $('#aiProposal').textContent=describeDecision(aiProposal.decision);
+    $('#aiProposal').textContent=describeDecision(aiProposal.decision)+'\n\nWritable: '+sem.writable.length+' track(s)';
     setAiStatus('Proposal ready. Review it, then Apply. Nothing changed yet.');
     $('#aiApply').disabled=false
   }catch(e){

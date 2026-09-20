@@ -34,6 +34,14 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 ## Riwayat perubahan (terbaru dulu)
 
+### Perbaikan 4.10.1 (semantik preserve Mode 1)
+
+- **Token preserve `all` dihapus.** Karena `target` di Mode 1 selalu wajib, `preserve:["all"]` selalu bertentangan dengan target dan tidak punya penggunaan sehat; sekarang ditolak sebagai token tak dikenal.
+- **System prompt diperketat**: `preserve` default `[]`; hanya diisi bila user eksplisit minta keep/preserve/jangan ubah; dilarang mengarang preserve dari konteks; dilarang men-preserve seluruh target. Disertai contoh eksplisit.
+- **Validasi semantik** (`AISemanticValidate`) berjalan setelah validator struktural: target & preserve di-expand ke role, dan bila **semua** role target tertutup preserve (atau terkunci), proposal **ditolak sebelum tombol Apply aktif**. Overlap parsial tetap boleh (target drums + preserve kick ⇒ hat/perc masih writable).
+- **Pesan error spesifik**: *"Model proposed a target that is fully preserved/locked — ask again."*
+- **Preserve tidak pernah dibuang diam-diam**: bila keputusan model kontradiktif, kita reject, bukan menghapus preserve yang diminta user.
+
 ### Baru di 4.10.0 (koneksi AI multi-provider)
 
 - **OpenAI bukan lagi provider hardcoded**, hanya connection profile default. Semua koneksi memakai **satu adapter OpenAI-compatible Chat Completions** — tanpa protocol baru, tanpa Anthropic native, tanpa Responses API.
@@ -177,4 +185,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.10.0**.
+Versi saat ini: **4.10.1**.
