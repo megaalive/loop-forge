@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.7.2 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.7.3 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.7.2 — review fixes ===== */
+/* ===== LOOPFORGE-16 v4.7.3 — review fixes ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -512,7 +512,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.7.2', STEPS=16, TRACKS=16;
+const APP_VERSION='4.7.3', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1184,13 +1184,16 @@ async function renderOffline(onlyTrack=null){
   const buses=Array.from({length:TRACKS},()=>{const gain=ac.createGain(),duck=ac.createGain(),pan=ac.createStereoPanner?ac.createStereoPanner():ac.createGain();gain.connect(duck);duck.connect(pan);pan.connect(offMaster);return{gain,duck,pan}});
   renderMaster=offMaster;renderBuses=buses;
   try{
+    const sw=(+$('#swing').value||0)/100;
     chain.forEach((p,bar)=>{
-      const ts=state.patterns[p],anySolo=ts.some(t=>t.solo),sw=(+$('#swing').value||0)/100;
+      const ts=state.patterns[p],anySolo=ts.some(t=>t.solo),barStart=bar*16*stepSec;
       ts.forEach((tr,i)=>{
+        const audible=onlyTrack!=null?(i===onlyTrack):(!tr.mute&&(!anySolo||tr.solo));
+        if(onlyTrack==null||i===onlyTrack){
+          buses[i].gain.gain.setValueAtTime(audible?Math.max(0,tr.volume):0,barStart);
+          if(buses[i].pan.pan)buses[i].pan.pan.setValueAtTime(tr.pan,barStart)
+        }
         if(onlyTrack!=null&&i!==onlyTrack)return;
-        const audible=onlyTrack!=null?true:(!tr.mute&&(!anySolo||tr.solo));
-        buses[i].gain.gain.value=audible?Math.max(0,tr.volume):0;
-        if(buses[i].pan.pan)buses[i].pan.pan.value=tr.pan;
         if(!audible)return;
         if(isPitchedTrack(tr)){
           noteEvents(tr).forEach(n=>{if(Math.random()>n.p)return;const k=n.start,when=Math.max(.001,(bar*16+k)*stepSec+((k%2)?stepSec*sw*.52:0)+(n.shift||0)/1000);hit(ac,tr,when,noteVelocity(n.velocity),n.pitch,sampleBuffers[i],0,i,ts,onlyTrack!=null,n.length*stepSec)});
@@ -1206,6 +1209,7 @@ async function renderOffline(onlyTrack=null){
       if(sidechain&&onlyTrack!=null&&ts[onlyTrack]&&(ts[onlyTrack].role||'')==='bass'){
         ts.forEach(tr=>{
           if(tr.type!=='kick')return;
+          if(tr.mute||(anySolo&&!tr.solo))return;
           tr.steps.forEach((st,k)=>{
             if(!st.v||Math.random()>st.p)return;
             const when=Math.max(.001,(bar*16+k)*stepSec+((k%2)?stepSec*sw*.52:0)+(st.shift||0)/1000);
