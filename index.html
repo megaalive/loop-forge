@@ -705,11 +705,11 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
               <div class="gen-inline" id="genLocalIdleHint">Add text to use target-specific local generation.</div>
             </div>
           </div>
-          <!-- Seed: an advanced generation/tool parameter. It is read by runGen() (local text),
-               generateAllParts() (A–D), variationToNext() (Variation) and fillGaps(). Because the
-               Fill gaps tool (always present in Native) reads it, the field stays available in
-               Native; the hint below says exactly which operations consume it so a visible field
-               is never silently ignored. -->
+          <!-- Seed: an advanced GENERATOR parameter. It is read only by runGen() (local text),
+               generateAllParts() (A–D) and variationToNext() (Variation). Track tools (incl.
+               Fill gaps) do NOT read it. The field stays available in Native so the primary
+               Generate never uses a hidden value, and the state-aware hint spells out exactly
+               which operations consume it. Hidden in LLM (LLM path does not read it). -->
           <div id="genSeedRow" style="display:none">
             <div class="gen-h" style="margin-top:10px">Generation seed</div>
             <label class="control" style="max-width:220px">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label>
@@ -2242,12 +2242,14 @@ function syncProposalCard(){
 //                            fresh via populateCurrentIdea() (Math.random), so we must NOT
 //                            promise full reproducibility.
 //   · plain New idea (Current, no text) → generateIdea() ignores the seed entirely.
+// NOTE: Fill gaps is a TRACK TOOL and does NOT read the Generation seed, so it is
+// deliberately not mentioned here.
 function seedHintForState(){
   if(genMode==='variation')return 'Used by this variation. Same seed + same source part/settings reproduces the same variation.';
   const scope=genScope();
   if(scope==='all')return 'Seed affects the B–D variations. Part A is generated fresh, so A–D is not fully reproducible.';
   if(nativeLocalTextRaw().length>0)return 'Used by this local-text generation. Same seed + same text/settings reproduces the same result.';
-  return 'Not used by this Generate (New idea follows Style/Simple↔Busy). Used by A–D, Variation and Fill gaps.';
+  return 'Not used by this Generate (New idea follows Style/Simple↔Busy). Used by A–D and Variation.';
 }
 // Reflect engine + native mode into the DOM. Visibility only — no mutation.
 function syncGenUI(){
@@ -2287,10 +2289,11 @@ function syncGenUI(){
   // hide that Feel row entirely while the local-text path is in charge.
   const feelRow=$('#genFeelRow');
   if(feelRow)feelRow.style.display=(localActive&&localTextOn)?'none':'';
-  // Seed is read by runGen() (local text), generateAllParts() (A–D), variationToNext()
-  // (Variation) and fillGaps() (always available in Native). It is therefore available
-  // in every Native state; the hint spells out honestly which operations consume it and
-  // whether reproducibility can be claimed — the A–D base part is generated fresh.
+  // Seed is read by runGen() (local text), generateAllParts() (A–D) and
+  // variationToNext() (Variation) — NEVER by the Track tools. It therefore stays
+  // available in every Native state so the primary Generate never consumes a hidden
+  // value; the state-aware hint spells out honestly which operations consume it and
+  // whether reproducibility can be claimed (the A–D base part is generated fresh).
   const seedRow=$('#genSeedRow');if(seedRow)seedRow.style.display=llm?'none':'';
   const seedHint=$('#genSeedHint');
   if(seedHint)seedHint.textContent=seedHintForState();
@@ -2422,7 +2425,13 @@ function syncPromptValidation(){
 }
 
 function runGen(){const prompt=nativePrompt(),target=$('#genTarget').value,seed=(+$('#genSeed').value||0)>>>0,intent=parseIntent(prompt),rng=seeded(seed^hash32(prompt+'|'+currentPattern+'|'+target));checkpoint('Generate');const ids=targetIndexes(target,intent.q);if(!ids.length)return toast('No writable target: locked or preserved by prompt');ids.forEach(i=>genRoleTrack(i,intent,rng,true));$('#genResult').textContent=describeIntent(intent,target)+` · changed ${ids.length} track(s) · locks/preserve respected`;markForge(onKeys());renderAll();setFootStatus('Generated with local text \u00b7 '+ids.length+' track(s).','ok')}
-function fillGaps(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('Selected track is locked');checkpoint('Fill gaps');const rng=seeded((+$('#genSeed').value||0)^hash32(nativePrompt()+'fill'+selectedTrack));if(isPitchedTrack(tr)){const occupied=new Set(noteEvents(tr).map(n=>n.start));for(let k=0;k<16;k++){if(occupied.has(k))continue;const prev=occupied.has((k+15)%16),next=occupied.has((k+1)%16);if((prev||next)&&rng()<.28)addNote(tr,tr.note,k,1,1,.5,Math.round((rng()*2-1)*10))}}else{for(let k=0;k<16;k++){if(tr.steps[k].v)continue;const prev=tr.steps[(k+15)%16].v,next=tr.steps[(k+1)%16].v;if((prev||next)&&rng()<.34){tr.steps[k].v=1;tr.steps[k].p=.5;tr.steps[k].shift=Math.round((rng()*2-1)*10)}}}markForge(onKeys());renderAll();toast('Gaps filled with ghost notes')}
+// Fill gaps is a TRACK TOOL, not a Generator operation. Its RNG is deliberately
+// decoupled from every Generator control (genSeed, local-text prompt, target,
+// genre/density, engine/mode/scope) so nothing hidden can change it. It depends
+// only on local track context (current part + selected track) via a deterministic
+// local salt — no global Math.random(). Music character (probabilities, ghost
+// velocity, shift, lock/checkpoint behaviour) is unchanged.
+function fillGaps(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('Selected track is locked');checkpoint('Fill gaps');const rng=seeded(hash32('fill|'+currentPattern+'|'+selectedTrack));if(isPitchedTrack(tr)){const occupied=new Set(noteEvents(tr).map(n=>n.start));for(let k=0;k<16;k++){if(occupied.has(k))continue;const prev=occupied.has((k+15)%16),next=occupied.has((k+1)%16);if((prev||next)&&rng()<.28)addNote(tr,tr.note,k,1,1,.5,Math.round((rng()*2-1)*10))}}else{for(let k=0;k<16;k++){if(tr.steps[k].v)continue;const prev=tr.steps[(k+15)%16].v,next=tr.steps[(k+1)%16].v;if((prev||next)&&rng()<.34){tr.steps[k].v=1;tr.steps[k].p=.5;tr.steps[k].shift=Math.round((rng()*2-1)*10)}}}markForge(onKeys());renderAll();toast('Gaps filled with ghost notes')}
 // Shared Similar↔Wild core for one track. amount = chance to touch, intensity = 0..1 wildness.
 function mutateTrack(tr,i,rng,amount,intensity){
   if(!tr||tr.locked)return;
