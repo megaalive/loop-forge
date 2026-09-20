@@ -91,6 +91,20 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - **Similar ↔ Wild**: kontrol variasi baru menggantikan kekuatan `Variation → next` yang dulu tetap. Geser ke kiri untuk perubahan dekat, ke kanan untuk variasi liar.
 - **Humanize sadar peran**: kick/snare minim pergeseran, hat/perc lebih longgar, chord stabil, bass rapat — lewat tabel `HUMANIZE_BY_ROLE`.
 
+## Baru di 4.9.0 — AI Mode 1 (typed decisions)
+
+Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia menjadi **parameter typed**; generator lokal yang tetap menulis nada. Model menilai, kode mengeksekusi.
+
+- **Provider: OpenAI saja**, endpoint resmi dipin (`https://api.openai.com/v1/chat/completions`), lewat `fetch` langsung tanpa SDK. Tanpa Anthropic, tanpa custom endpoint pada rilis ini.
+- **Key default hanya di memori** (hilang saat refresh). **Remember for this tab** opsional memakai `sessionStorage`. Tidak ada penyimpanan permanen.
+- **Schema ketat**: hanya `action, target, style, density, syncopation, humanizeMs, variation, preserve`. Field tak dikenal **ditolak**, bukan diabaikan; key `__proto__`/`constructor` diblokir; `target`/`style` enum dari kosakata lokal; `density/syncopation/variation` di-clamp 0..1, `humanizeMs` 0..40.
+- **Preview transparan**: panel menampilkan payload yang benar-benar dikirim ke provider dan proposal hasil normalisasi, sebelum **Apply**.
+- **Satu Apply = satu `checkpoint()`** — satu Undo mengembalikan keadaan sebelum AI.
+- **Lock selalu menang**; `preserve` dihormati.
+- **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
+
+Keamanan (dinyatakan apa adanya): key tidak pernah melewati server milik LOOPFORGE — browser mengirimnya langsung ke OpenAI. Ini **bukan** mekanisme penyimpanan aman: kode pada origin yang sama, extension browser, atau akses perangkat bisa membacanya. Karena itu key tidak pernah masuk ke project, share link, export JSON, history, toast, atau console. OpenAI sendiri menonaktifkan penggunaan SDK di browser secara default karena risiko ini; fitur ini disediakan sebagai alat personal/advanced, bukan jaminan keamanan.
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -107,4 +121,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.8.0**.
+Versi saat ini: **4.9.0**.

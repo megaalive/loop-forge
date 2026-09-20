@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.8.0 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.9.0 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.8.0 — note helpers ===== */
+/* ===== LOOPFORGE-16 v4.9.0 — AI mode 1 ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -231,6 +231,9 @@ input[type=range]{padding:0!important;accent-color:var(--accent)}
 .suggest{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
 .suggest button{border:1px dashed var(--accent-dim);background:transparent;color:var(--accent);border-radius:var(--radius-sm);padding:3px 6px;font-size:10px;font-weight:700;cursor:pointer}
 .suggest button:hover{background:var(--accent-soft)}
+.aipre{margin:0;padding:7px 8px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);font:10.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto}
+#aiKey{font-family:var(--mono);letter-spacing:.02em}
+.ai-warn{color:var(--warn)}
 .autosnap{display:flex;align-items:center;gap:5px;margin-top:8px;color:var(--text-faint);font-size:10px;cursor:pointer}
 .autosnap input{margin:0}
 .inline-piano .piano-cell{touch-action:none}
@@ -433,6 +436,25 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
             <div class="row"><label class="control">Rotate<input id="euclidRotate" type="number" min="-15" max="15" value="0"></label><label class="control">Humanize ms<input id="humanizeMs" type="number" min="0" max="80" value="12"></label></div>
             <div class="grid2"><button id="applyEuclid" class="btn">Apply rhythm</button><button id="humanizeTrack" class="btn">Humanize</button></div>
           </div></details>
+          <details class="morebox advanced-only" id="aiBox"><summary>AI — describe it, code decides</summary><div class="inside">
+            <p class="small">BYO OpenAI key. The key stays in this browser only and is sent directly to OpenAI — never through any LOOPFORGE server. This is a personal-use convenience, not secure storage: any code on this origin or a browser extension could read it.</p>
+            <label class="control">OpenAI API key<input id="aiKey" type="password" autocomplete="off" placeholder="sk-..."></label>
+            <label class="control" style="margin-top:6px">Model<input id="aiModel" value="gpt-4o-mini"></label>
+            <div class="grid2" style="margin-top:6px">
+              <button id="aiTest" class="btn">Test key</button>
+              <button id="aiForget" class="btn">Forget key</button>
+            </div>
+            <label class="autosnap" style="cursor:pointer"><input type="checkbox" id="aiRemember">Remember for this tab (sessionStorage)</label>
+            <label class="control" style="margin-top:8px">What do you want?<textarea id="aiPrompt" rows="2" placeholder="dark sparse bass, keep the drums"></textarea></label>
+            <div class="grid2" style="margin-top:6px"><button id="aiAsk" class="btn primary">Ask AI</button><button id="aiApply" class="btn" disabled>Apply proposal</button></div>
+            <div id="aiStatus" class="genresult">AI off. Add a key to let the model choose parameters; the local generator still writes the notes.</div>
+            <details class="morebox" id="aiPrivacy" style="margin-top:8px"><summary>Preview what is sent &amp; what is proposed</summary><div class="inside">
+              <div class="small" style="margin-bottom:4px"><b>Sent to provider</b></div>
+              <pre id="aiSent" class="aipre">—</pre>
+              <div class="small" style="margin:6px 0 4px"><b>Proposed locally</b></div>
+              <pre id="aiProposal" class="aipre">—</pre>
+            </div></details>
+          </div></details>
         </div>
       </section>
 
@@ -525,7 +547,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.8.0', STEPS=16, TRACKS=16;
+const APP_VERSION='4.9.0', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1252,6 +1274,179 @@ function genRoleTrack(i,intent,rng,replace=true){
   else if(role==='sample'){for(let k=0;k<16;k++)if(rng()<intent.density*.16){putStep(k,2,rng()>.7?.75:1);tr.steps[k].slice=Math.floor(rng()*16)}}
 }
 function describeIntent(x,target){return`${x.style} · density ${Math.round(x.density*100)}% · sync ${Math.round(x.sync*100)}% · ${x.dark>.6?'dark':x.dark<.4?'bright':'neutral'} · ${x.soft>.6?'soft':x.soft<.3?'hard':'balanced'} · target ${target}`}
+
+/* =========================================================================
+   AI MODE 1 — typed decisions only. The model picks parameters; the LOCAL
+   generator writes every note. Four separated concepts, same <script>:
+     SecretStore · ProviderAdapter · AIValidator · LocalExecutor
+   ========================================================================= */
+
+/* ---- SecretStore: memory by default, sessionStorage only if user opts in ---- */
+const SecretStore={
+  _mem:null,
+  get(){if(this._mem)return this._mem;try{if(sessionStorage.getItem('loopforge-ai-remember')==='1'){const v=sessionStorage.getItem('loopforge-ai-key');if(v){this._mem=v;return v}}}catch(_){}return null},
+  set(key){this._mem=key||null;try{if($('#aiRemember').checked){sessionStorage.setItem('loopforge-ai-key',key);sessionStorage.setItem('loopforge-ai-remember','1')}else{sessionStorage.removeItem('loopforge-ai-key');sessionStorage.removeItem('loopforge-ai-remember')}}catch(_){}},
+  clear(){this._mem=null;try{sessionStorage.removeItem('loopforge-ai-key');sessionStorage.removeItem('loopforge-ai-remember')}catch(_){}}
+};
+
+/* ---- AIValidator: strict schema. Unknown fields are rejected, not ignored. ---- */
+const AI_TARGETS=['drums','bass','harmony','melody'];
+const AI_STYLES=['Techno','House','Dark Ambient','Breakbeat','Trap','Funk','Jaipongan-ish','Minimal'];
+const AI_ROLES=['kick','snare','hat','perc','bass','chord','melody','arp','texture','fx','sample'];
+const AI_PRESERVE_GROUPS=['drums','bass','harmony','melody','texture','full'];
+const AI_FIELDS=['action','target','style','density','syncopation','humanizeMs','variation','preserve'];
+const AI_PROTO_KEYS=['__proto__','constructor','prototype'];
+function clamp01(v){return clamp(+v||0,0,1)}
+function AIValidator(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return {ok:false,error:'Response is not a single JSON object'};
+  const keys=Object.getOwnPropertyNames(raw);
+  const proto=keys.filter(k=>AI_PROTO_KEYS.includes(k));
+  if(proto.length)return {ok:false,error:'Illegal key(s): '+proto.join(', ')};
+  const unknown=keys.filter(k=>!AI_FIELDS.includes(k));
+  if(unknown.length)return {ok:false,error:'Unknown field(s): '+unknown.join(', ')};
+  if(raw.action!=='reshape')return {ok:false,error:'action must be "reshape"'};
+  if(!AI_TARGETS.includes(raw.target))return {ok:false,error:'target must be one of '+AI_TARGETS.join('/')};
+  if(!AI_STYLES.includes(raw.style))return {ok:false,error:'style not in local vocabulary'};
+  if(typeof raw.density!=='number'||typeof raw.syncopation!=='number')return {ok:false,error:'density and syncopation must be numbers'};
+  if(raw.humanizeMs!=null&&typeof raw.humanizeMs!=='number')return {ok:false,error:'humanizeMs must be a number'};
+  if(raw.variation!=null&&typeof raw.variation!=='number')return {ok:false,error:'variation must be a number'};
+  let preserve=[];
+  if(raw.preserve!=null){
+    if(!Array.isArray(raw.preserve)||raw.preserve.some(x=>typeof x!=='string'))return {ok:false,error:'preserve must be an array of role names'};
+    const bad=raw.preserve.filter(r=>!AI_ROLES.includes(r)&&!AI_PRESERVE_GROUPS.includes(r));
+    if(bad.length)return {ok:false,error:'unknown role(s) in preserve: '+bad.join(', ')};
+    preserve=raw.preserve
+  }
+  return {ok:true,decision:{
+    action:'reshape',
+    target:raw.target,
+    style:raw.style,
+    density:clamp01(raw.density),
+    syncopation:clamp01(raw.syncopation),
+    humanizeMs:clamp(Math.round(raw.humanizeMs||0),0,40),
+    variation:clamp01(raw.variation==null?.4:raw.variation),
+    preserve
+  }}
+}
+function describeDecision(d){
+  return 'target '+d.target+' · '+d.style+' · density '+Math.round(d.density*100)+'% · sync '+Math.round(d.syncopation*100)+'% · humanize '+d.humanizeMs+' ms · variation '+Math.round(d.variation*100)+'% · preserve '+(d.preserve.length?d.preserve.join('+'):'none')
+}
+
+/* ---- ProviderAdapter: OpenAI official endpoint only, raw fetch, no SDK ---- */
+const OPENAI_ENDPOINT='https://api.openai.com/v1/chat/completions';
+function aiSystemPrompt(){
+  return 'You translate a musician\'s plain-language request into strict JSON parameters. '
+    +'You never write notes or rhythms yourself. Reply with ONE JSON object and nothing else.\n'
+    +'Schema: {"action":"reshape","target":"drums|bass|harmony|melody","style":"<one of: '+AI_STYLES.join('|')+'">,'
+    +'"density":0..1,"syncopation":0..1,"humanizeMs":0..40,"variation":0..1,"preserve":["kick"|"snare"|"hat"|"perc"|"bass"|"chord"|"melody"|"arp"|"texture"|"fx"|"sample"]}\n'
+    +'No extra keys. density = how busy, syncopation = off-beat push, variation = how far from the current pattern, preserve = roles the user asked to keep.'
+}
+function aiStateSummary(){
+  const ts=tracks(),anySolo=ts.some(t=>t.solo);
+  return ts.map((tr,i)=>String(i+1).padStart(2,'0')+' '+tr.name+' ['+(tr.role||tr.type)+']'+(tr.locked?' LOCKED':'')+(tr.mute?' muted':'')+(anySolo&&tr.solo?' solo':'')+' steps='+tr.steps.filter(s=>s.v).length+(isPitchedTrack(tr)?' notes='+noteEvents(tr).length:'')).join('\n')
+}
+function aiBuildPayload(prompt){
+  return {
+    model:($('#aiModel').value||'gpt-4o-mini').trim(),
+    messages:[{role:'system',content:aiSystemPrompt()},{role:'user',content:'Request: '+prompt+'\n\nCurrent part '+currentPattern+' (key '+$('#key').value+' '+$('#scale').value+'):\n'+aiStateSummary()}],
+    temperature:0.2,
+    response_format:{type:'json_object'}
+  }
+}
+async function openAIChat(payload,key,signal){
+  const res=await fetch(OPENAI_ENDPOINT,{method:'POST',signal,headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(payload)});
+  if(!res.ok){let detail='';try{detail=(await res.json()).error?.message||''}catch(_){}throw new Error('OpenAI '+res.status+(detail?' — '+detail:''))}
+  const data=await res.json();
+  const content=data?.choices?.[0]?.message?.content;
+  if(!content)throw new Error('Empty response from OpenAI');
+  return content
+}
+function extractJson(text){
+  const t=String(text).trim().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  const s=t.indexOf('{'),e=t.lastIndexOf('}');
+  if(s<0||e<0)throw new Error('No JSON object in response');
+  return JSON.parse(t.slice(s,e+1))
+}
+
+/* ---- LocalExecutor: reuses the existing local generator; Lock always wins ---- */
+let aiProposal=null,aiAbort=null;
+function aiDecisionToIntent(d){
+  return {style:d.style,density:d.density,sync:d.syncopation,dark:d.style==='Dark Ambient'?.8:.5,soft:.45,human:d.humanizeMs*(40/40),q:''}
+}
+function localExecutorApply(d){
+  const preserveQ=d.preserve.length?('keep '+d.preserve.join(' ')):'';
+  const ids=targetIndexes(d.target,preserveQ);
+  if(!ids.length)return {applied:0,reason:'No writable target (locked or preserved)'};
+  checkpoint('AI reshape');
+  const intent=aiDecisionToIntent(d);
+  const rng=seeded(hash32(JSON.stringify(d)+'|'+currentPattern));
+  ids.forEach(i=>genRoleTrack(i,intent,rng,true));
+  markForge(onKeys());renderAll();
+  return {applied:ids.length}
+}
+function setAiStatus(msg,warn){const el=$('#aiStatus');if(el){el.textContent=msg;el.classList.toggle('ai-warn',!!warn)}}
+function refreshAiUI(){
+  const has=!!SecretStore.get();
+  $('#aiApply').disabled=!aiProposal;
+  if(!has)setAiStatus('AI off. Add a key to let the model choose parameters; the local generator still writes the notes.');
+}
+function aiForget(){
+  SecretStore.clear();aiProposal=null;$('#aiKey').value='';$('#aiRemember').checked=false;
+  $('#aiSent').textContent='—';$('#aiProposal').textContent='—';
+  setAiStatus('Key forgotten. AI off.');refreshAiUI()
+}
+async function aiTest(){
+  const key=SecretStore.get();if(!key)return toast('Add a key first');
+  setAiStatus('Testing key…');
+  aiAbort=new AbortController();const t=setTimeout(()=>aiAbort.abort(),12000);
+  try{
+    const payload={model:($('#aiModel').value||'gpt-4o-mini').trim(),messages:[{role:'user',content:'reply with the single word ok'}],max_tokens:5};
+    await openAIChat(payload,key,aiAbort.signal);
+    setAiStatus('Key OK. Ready.')
+  }catch(e){setAiStatus('Key test failed: '+e.message,true)}
+  finally{clearTimeout(t);aiAbort=null}
+}
+async function aiAsk(){
+  const key=SecretStore.get();if(!key)return toast('Add an OpenAI key first');
+  const prompt=$('#aiPrompt').value.trim();if(!prompt)return toast('Describe what you want first');
+  setAiStatus('Asking the model for parameters…');
+  aiProposal=null;$('#aiApply').disabled=true;
+  const payload=aiBuildPayload(prompt);
+  $('#aiSent').textContent=JSON.stringify({endpoint:OPENAI_ENDPOINT,model:payload.model,body:{messages:payload.messages}},null,2);
+  aiAbort=new AbortController();const t=setTimeout(()=>aiAbort.abort(),20000);
+  try{
+    const content=await openAIChat(payload,key,aiAbort.signal);
+    const parsed=extractJson(content);
+    const v=AIValidator(parsed);
+    if(!v.ok){$('#aiProposal').textContent='Rejected by validator: '+v.error;setAiStatus('Model output rejected — nothing applied. You can use the local generator instead.',true);return}
+    aiProposal=v.decision;
+    $('#aiProposal').textContent=describeDecision(aiProposal);
+    setAiStatus('Proposal ready. Review it, then Apply. Nothing changed yet.');
+    $('#aiApply').disabled=false
+  }catch(e){
+    const msg=e.name==='AbortError'?'Request timed out':e.message;
+    $('#aiProposal').textContent='No valid proposal: '+msg;
+    setAiStatus('AI unavailable — nothing applied. Use the local generator instead.',true)
+  }finally{clearTimeout(t);aiAbort=null}
+}
+function aiApply(){
+  if(!aiProposal)return toast('Ask AI first');
+  const res=localExecutorApply(aiProposal);
+  if(!res.applied){setAiStatus('AI proposal could not apply: '+res.reason,true);toast(res.reason);return}
+  setAiStatus('Applied via local generator · '+describeDecision(aiProposal)+' · '+res.applied+' track(s). One Undo reverts it.');
+  aiProposal=null;$('#aiApply').disabled=true
+}
+function bindAI(){
+  if(!$('#aiBox'))return;
+  const keyEl=$('#aiKey'),rem=$('#aiRemember');
+  const saved=SecretStore.get();
+  if(saved){keyEl.value=saved;rem.checked=true}
+  keyEl.addEventListener('input',()=>{SecretStore.set(keyEl.value.trim());refreshAiUI()});
+  rem.addEventListener('change',()=>{SecretStore.set(keyEl.value.trim());toast(rem.checked?'Key kept for this tab only':'Key kept in memory only')});
+  $('#aiTest').onclick=aiTest;$('#aiForget').onclick=aiForget;$('#aiAsk').onclick=aiAsk;$('#aiApply').onclick=aiApply;
+  refreshAiUI()
+}
+
 function runGen(){const prompt=$('#genPrompt').value.trim(),target=$('#genTarget').value,seed=(+$('#genSeed').value||0)>>>0,intent=parseIntent(prompt),rng=seeded(seed^hash32(prompt+'|'+currentPattern+'|'+target));checkpoint('Generate');const ids=targetIndexes(target,intent.q);if(!ids.length)return toast('No writable target: locked or preserved by prompt');ids.forEach(i=>genRoleTrack(i,intent,rng,true));$('#genResult').textContent=describeIntent(intent,target)+` · changed ${ids.length} track(s) · locks/preserve respected`;markForge(onKeys());renderAll();toast('Generation applied')}
 function fillGaps(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('Selected track is locked');checkpoint('Fill gaps');const rng=seeded((+$('#genSeed').value||0)^hash32($('#genPrompt').value+'fill'+selectedTrack));if(isPitchedTrack(tr)){const occupied=new Set(noteEvents(tr).map(n=>n.start));for(let k=0;k<16;k++){if(occupied.has(k))continue;const prev=occupied.has((k+15)%16),next=occupied.has((k+1)%16);if((prev||next)&&rng()<.28)addNote(tr,tr.note,k,1,1,.5,Math.round((rng()*2-1)*10))}}else{for(let k=0;k<16;k++){if(tr.steps[k].v)continue;const prev=tr.steps[(k+15)%16].v,next=tr.steps[(k+1)%16].v;if((prev||next)&&rng()<.34){tr.steps[k].v=1;tr.steps[k].p=.5;tr.steps[k].shift=Math.round((rng()*2-1)*10)}}}markForge(onKeys());renderAll();toast('Gaps filled with ghost notes')}
 function mutatePattern(p,seed,amount=.18,intensity=.5){
@@ -1444,7 +1639,7 @@ const typingMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:7
 
 async function init(){
   setMode(localStorage.getItem(LS_MODE)!=='advanced');
-  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
+  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
   if(!navigator.requestMIDIAccess){$('#midiBtn').disabled=true;$('#midiBtn').textContent='MIDI n/a';$('#midiBtn').title='Web MIDI is not supported by this browser'}
   document.addEventListener('pointerdown',primeAudio,{once:true,passive:true});
   document.addEventListener('touchend',primeAudio,{once:true,passive:true});
