@@ -103,6 +103,15 @@ Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia 
 - **Lock selalu menang**; `preserve` dihormati.
 - **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
 
+### Perbaikan 4.9.1 (stabilisasi Mode 1)
+
+- **Typed preserve benar-benar typed**: tidak ada lagi konversi ke kalimat `"keep drums bass"`. `expandPreserve()` memperluas grup secara deterministik (`drums→kick/snare/hat/perc`, `harmony→chord`, dst.) dan `isPreserved()` mencocokkan role aktual, jadi `["kick","snare","hat"]` maupun `["drums","bass"]` dihormati persis.
+- **Target berbasis role, bukan slot tetap**: `semanticTargetIndexes()` memilih track dari `role` aktual, sehingga memindahkan role antar baris tetap tertangkap AI.
+- **`variation` tidak lagi mati**: dipetakan ke mesin Similar↔Wild yang sudah ada lewat `mutateTrack()`/`mutateSelectedTracks()`.
+- **Race request AI diperbaiki**: `aiRequestId` + `AbortController` lokal per request; request baru membatalkan yang lama, `Forget key` membatalkan yang sedang jalan, dan respons lama tidak bisa menimpa proposal baru.
+- **TOCTOU ditutup**: tiap proposal menyimpan konteks (`pattern/key/scale/state`); kalau konteks berubah sebelum **Apply**, proposal ditolak dengan pesan *stale*.
+- **Preview payload persis**: panel menampilkan body yang benar-benar dikirim (termasuk `temperature` dan `response_format`); `Authorization` tidak pernah ditampilkan.
+
 Keamanan (dinyatakan apa adanya): key tidak pernah melewati server milik LOOPFORGE — browser mengirimnya langsung ke OpenAI. Ini **bukan** mekanisme penyimpanan aman: kode pada origin yang sama, extension browser, atau akses perangkat bisa membacanya. Karena itu key tidak pernah masuk ke project, share link, export JSON, history, toast, atau console. OpenAI sendiri menonaktifkan penggunaan SDK di browser secara default karena risiko ini; fitur ini disediakan sebagai alat personal/advanced, bukan jaminan keamanan.
 
 ## Menjalankan
@@ -121,4 +130,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.9.0**.
+Versi saat ini: **4.9.1**.
