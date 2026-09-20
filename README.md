@@ -32,76 +32,19 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - audit fungsional v4.6.0: SAMPLE tanpa buffer tetap senyap, playhead/chain memakai timer terkelola, lock konsisten, note events dibersihkan saat konversi ke sample, dan piano dock lama dihapus
 - pada piano roll: klik untuk tambah/hapus nada, drag horizontal untuk mengatur panjang nada
 
-## Baru di 4.7.0
+## Riwayat perubahan (terbaru dulu)
 
-- **Autosave & restore**: project otomatis tersimpan di browser dan dipulihkan saat dibuka lagi; mode More/easy juga diingat
-- **Undo berlabel**: toast undo/redo menyebut aksi yang dibatalkan (mis. "Undo: Mute")
-- **Editor step popover**: klik-kanan (atau long-press) pada step membuka velocity, probability, microtiming, note, slice, copy/paste, dan audition tanpa pindah tab
-- **Paint gesture**: drag melintasi grid untuk menyalakan/mematikan banyak step; **Alt+drag** mengatur velocity secara vertikal; Shift+klik tetap memutar strength
-- **Master oscilloscope** di status bar dan **VU meter per track** di mixer
-- **Share link**: seluruh pola dikodekan ke URL (`#p=...`) dan bisa disalin lewat **Copy share link**
-- **Waveform sampler**: bentuk gelombang dengan 16 pembatas slice; klik area untuk menetapkan slice ke step aktif
-- **Export MIDI**: file `.mid` standar dari chain A–D, termasuk swing dan microtiming
-- **Master echo** (send delay) dan **sidechain Duck** (kick menekan bass) untuk kedalaman mix
-- **Forge flash**: step yang dihasilkan berkedip singkat sebagai umpan balik visual; chip prompt cepat di panel Idea
-- aksen warna per-role pada baris track dan indikator velocity di dalam step
+### Baru di 4.10.0 (koneksi AI multi-provider)
 
-## Perbaikan 4.7.1
-
-- **Share link tidak lagi menyandera reload**: **Copy share link** tidak mengubah address bar, dan setelah link dibuka hash dibersihkan (dengan penanda sesi sebagai cadangan) sehingga edit setelah membuka link tetap menang saat reload.
-- **Autosave menyeluruh**: perubahan BPM, swing, echo, duck, mixer, slider Sound, microtiming, dan chain/key/scale kini memakai `markDirty()` terpusat, bukan hanya bergantung pada render.
-- **Parity export**: WAV/stem offline sekarang menyertakan master echo dan sidechain duck, jadi hasil render sama dengan yang terdengar saat Play.
-- **Gesture mobile**: sentuhan satu jari menggulir/mengetuk; long-press membuka editor; drag-paint dibatasi untuk mouse/pen.
-- **Lock konsisten**: row terkunci tidak bisa di-paint atau diedit dari popover/Step; popover menawarkan **Unlock track**.
-- **MIDI**: export memakai format 1 (satu track per baris + conductor) dengan drum di channel 10 General MIDI; track melodik menghindari channel 10.
-- **Performa**: oscilloscope dan VU meter hanya berjalan saat playing atau preview, dan berhenti saat tab tidak aktif.
-- Link share terkompresi memakai `deflate-raw`; browser tanpa `DecompressionStream` diberi pesan jelas alih-alih diam-diam membuka autosave.
-
-## Perbaikan 4.7.2
-
-- **Lock menutup celah keyboard**: aktivasi step via Space/Enter (`e.detail===0`) kini menghormati `tr.locked`, bukan hanya klik pointer.
-- **Parity level export**: `renderOffline` memakai gain master yang sama dengan realtime (0.82), jadi WAV/stem tidak lagi lebih keras dari yang terdengar saat Play.
-- **Stem bass mengikuti sidechain**: saat mengekspor stem bass (atau track lain) dengan Duck aktif, kick dari part lain memicu duck yang terdengar di bus, jadi stem mencerminkan mix terproses, bukan terisolasi-dry.
-- **Meter benar-benar start/stop**: loop `requestAnimationFrame` untuk oscilloscope/VU hanya hidup saat playing atau preview dan dihentikan saat Stop, tab disembunyikan, atau preview selesai.
-- Catatan desain: membuka shared link lalu tidak mengedit apa pun tidak menimpa project lokal (hash dibersihkan setelah dibaca, `restoring` mencegah autosave) — disengaja agar link orang lain aman dibuka.
-
-## Perbaikan 4.7.3
-
-- **Mixer per-part di export benar**: `renderOffline()` dulu menulis `gain`/`pan` langsung (nilai part terakhir menang untuk seluruh lagu). Sekarang dijadwalkan di tiap batas bar dengan `setValueAtTime(value, barStart)`, jadi volume/pan/mute/solo part A/B/C/D berubah tepat saat part berganti, sama seperti realtime.
-- **Kick yang di-mute atau ter-exclude solo tidak lagi memicu duck**: blok sidechain untuk bass stem kini memeriksa `!tr.mute && (!anySolo || tr.solo)` sebelum menjadikan kick sebagai trigger, konsisten dengan full mix.
-
-## Perbaikan 4.7.4
-
-- **Visualizer pada synth audition**: **Hear this sound** pada track synth kini menyalakan oscilloscope/VU seperti sample preview, lalu menghentikannya setelah nada selesai (berdasarkan attack+decay+release), kecuali sedang playing atau ada preview yang lebih baru.
-
-## Perbaikan 4.7.5
-
-- **VU per-track ikut audition**: preview sample maupun synth dulu menembus track bus (agar bisa melewati Solo), jadi VU track tidak bergerak. Sekarang audition memakai analyser preview tersendiri dan hasilnya ditampilkan pada meter track yang sedang diaudition, tanpa mengembalikan routing preview ke track bus. Playback normal tetap membaca analyser track bus seperti sebelumnya.
-
-## Perbaikan 4.7.6
-
-- **Lifecycle audition bersih**: pemilihan meter preview (`auditionTrack`) kini selalu dilepas saat audition selesai — termasuk **Stop sound** manual pada sample dan saat timer synth berakhir di tengah playback. Timer juga dijaga oleh index track agar timer lama tidak menghapus audition yang lebih baru. Penghentian meter RAF tetap terpisah: hanya berhenti bila tidak ada playback atau preview lain.
-- **Analyser tidak basi antar context**: `createAudioContext()` mengatur ulang `previewAnalyser`, `auditionTrack`, dan `auditionTap`, sehingga analyser dari AudioContext lama tidak pernah dipakai pada graph context baru.
-
-## Baru di 4.8.0 — bantuan menambah nada & beat
-
-- **Chord helper di inline piano roll**: tombol maj / min / 7 / maj7 / min7 / sus2 / sus4, plus **Add chord** pada step aktif. Chord mengikuti kunci & skala yang dipilih.
-- **Snap to scale**: tombol **Snap all to scale** memperbaiki nada yang di luar skala, dan opsi **Keep notes in scale** membuat klik di piano roll otomatis membulat ke nada terdekat dalam skala.
-- **Next note ideas**: saran nada berikutnya yang harmonis (berdasarkan skala dan nada terakhir), sekali klik untuk menambah.
-- **Similar ↔ Wild**: kontrol variasi baru menggantikan kekuatan `Variation → next` yang dulu tetap. Geser ke kiri untuk perubahan dekat, ke kanan untuk variasi liar.
-- **Humanize sadar peran**: kick/snare minim pergeseran, hat/perc lebih longgar, chord stabil, bass rapat — lewat tabel `HUMANIZE_BY_ROLE`.
-
-## Baru di 4.9.0 — AI Mode 1 (typed decisions)
-
-Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia menjadi **parameter typed**; generator lokal yang tetap menulis nada. Model menilai, kode mengeksekusi.
-
-- **Provider: OpenAI saja**, endpoint resmi dipin (`https://api.openai.com/v1/chat/completions`), lewat `fetch` langsung tanpa SDK. Tanpa Anthropic, tanpa custom endpoint pada rilis ini.
-- **Key default hanya di memori** (hilang saat refresh). **Remember for this tab** opsional memakai `sessionStorage`. Tidak ada penyimpanan permanen.
-- **Schema ketat**: hanya `action, target, style, density, syncopation, humanizeMs, variation, preserve`. Field tak dikenal **ditolak**, bukan diabaikan; key `__proto__`/`constructor` diblokir; `target`/`style` enum dari kosakata lokal; `density/syncopation/variation` di-clamp 0..1, `humanizeMs` 0..40.
-- **Preview transparan**: panel menampilkan payload yang benar-benar dikirim ke provider dan proposal hasil normalisasi, sebelum **Apply**.
-- **Satu Apply = satu `checkpoint()`** — satu Undo mengembalikan keadaan sebelum AI.
-- **Lock selalu menang**; `preserve` dihormati.
-- **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
+- **OpenAI bukan lagi provider hardcoded**, hanya connection profile default. Semua koneksi memakai **satu adapter OpenAI-compatible Chat Completions** — tanpa protocol baru, tanpa Anthropic native, tanpa Responses API.
+- **Connection selector** dengan field: name, **full chat endpoint**, model, API key. Bisa tambah/hapus koneksi; tetap compact & mobile-friendly.
+- **Profile config non-secret** (`{id,name,endpoint,model,protocol}`) boleh persist di `localStorage`, tetapi **tidak pernah** masuk `projectData`, export JSON, share link, atau history.
+- **Secret per-profile**: key default memory-only, opsi *Remember this key for this tab* memakai `sessionStorage` per-profile. Pindah koneksi memakai key masing-masing tanpa menyalin/membocorkan antar-profile.
+- **Endpoint safety**: HTTPS diizinkan; HTTP hanya untuk `localhost`/`127.0.0.1`; `user:pass@` dan scheme non-http(s) ditolak. Endpoint dianggap trust boundary dan UI memperingatkan bila bukan host OpenAI.
+- **Request generik**: hanya `model`, `messages`, `temperature` (tanpa mewajibkan `response_format` yang tidak universal), `Authorization: Bearer <key>`, `fetch redirect:'error'`, plus timeout/AbortController/race guard yang sudah ada.
+- **Preview privasi** menampilkan endpoint persis dan body tersanitasi — key tidak pernah tampil.
+- **Test connection** lewat chat endpoint yang dikonfigurasi (bukan `/models`), dengan pesan error untuk auth/404/429/timeout/network-CORS.
+- Invariant tetap: provider hanya menghasilkan typed Mode-1 decision; semua lewat `response → extractJson → AIValidator → proposal → Apply → LocalExecutor`. Tidak ada cabang provider di LocalExecutor.
 
 ### Perbaikan 4.9.6 (BPM otoritatif di semua jalur)
 
@@ -147,6 +90,77 @@ Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia 
 
 Keamanan (dinyatakan apa adanya): key tidak pernah melewati server milik LOOPFORGE — browser mengirimnya langsung ke OpenAI. Ini **bukan** mekanisme penyimpanan aman: kode pada origin yang sama, extension browser, atau akses perangkat bisa membacanya. Karena itu key tidak pernah masuk ke project, share link, export JSON, history, toast, atau console. OpenAI sendiri menonaktifkan penggunaan SDK di browser secara default karena risiko ini; fitur ini disediakan sebagai alat personal/advanced, bukan jaminan keamanan.
 
+## Baru di 4.9.0 — AI Mode 1 (typed decisions)
+
+Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia menjadi **parameter typed**; generator lokal yang tetap menulis nada. Model menilai, kode mengeksekusi.
+
+- **Provider: OpenAI saja**, endpoint resmi dipin (`https://api.openai.com/v1/chat/completions`), lewat `fetch` langsung tanpa SDK. Tanpa Anthropic, tanpa custom endpoint pada rilis ini.
+- **Key default hanya di memori** (hilang saat refresh). **Remember for this tab** opsional memakai `sessionStorage`. Tidak ada penyimpanan permanen.
+- **Schema ketat**: hanya `action, target, style, density, syncopation, humanizeMs, variation, preserve`. Field tak dikenal **ditolak**, bukan diabaikan; key `__proto__`/`constructor` diblokir; `target`/`style` enum dari kosakata lokal; `density/syncopation/variation` di-clamp 0..1, `humanizeMs` 0..40.
+- **Preview transparan**: panel menampilkan payload yang benar-benar dikirim ke provider dan proposal hasil normalisasi, sebelum **Apply**.
+- **Satu Apply = satu `checkpoint()`** — satu Undo mengembalikan keadaan sebelum AI.
+- **Lock selalu menang**; `preserve` dihormati.
+- **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
+
+## Baru di 4.8.0 — bantuan menambah nada & beat
+
+- **Chord helper di inline piano roll**: tombol maj / min / 7 / maj7 / min7 / sus2 / sus4, plus **Add chord** pada step aktif. Chord mengikuti kunci & skala yang dipilih.
+- **Snap to scale**: tombol **Snap all to scale** memperbaiki nada yang di luar skala, dan opsi **Keep notes in scale** membuat klik di piano roll otomatis membulat ke nada terdekat dalam skala.
+- **Next note ideas**: saran nada berikutnya yang harmonis (berdasarkan skala dan nada terakhir), sekali klik untuk menambah.
+- **Similar ↔ Wild**: kontrol variasi baru menggantikan kekuatan `Variation → next` yang dulu tetap. Geser ke kiri untuk perubahan dekat, ke kanan untuk variasi liar.
+- **Humanize sadar peran**: kick/snare minim pergeseran, hat/perc lebih longgar, chord stabil, bass rapat — lewat tabel `HUMANIZE_BY_ROLE`.
+
+## Perbaikan 4.7.6
+
+- **Lifecycle audition bersih**: pemilihan meter preview (`auditionTrack`) kini selalu dilepas saat audition selesai — termasuk **Stop sound** manual pada sample dan saat timer synth berakhir di tengah playback. Timer juga dijaga oleh index track agar timer lama tidak menghapus audition yang lebih baru. Penghentian meter RAF tetap terpisah: hanya berhenti bila tidak ada playback atau preview lain.
+- **Analyser tidak basi antar context**: `createAudioContext()` mengatur ulang `previewAnalyser`, `auditionTrack`, dan `auditionTap`, sehingga analyser dari AudioContext lama tidak pernah dipakai pada graph context baru.
+
+## Perbaikan 4.7.5
+
+- **VU per-track ikut audition**: preview sample maupun synth dulu menembus track bus (agar bisa melewati Solo), jadi VU track tidak bergerak. Sekarang audition memakai analyser preview tersendiri dan hasilnya ditampilkan pada meter track yang sedang diaudition, tanpa mengembalikan routing preview ke track bus. Playback normal tetap membaca analyser track bus seperti sebelumnya.
+
+## Perbaikan 4.7.4
+
+- **Visualizer pada synth audition**: **Hear this sound** pada track synth kini menyalakan oscilloscope/VU seperti sample preview, lalu menghentikannya setelah nada selesai (berdasarkan attack+decay+release), kecuali sedang playing atau ada preview yang lebih baru.
+
+## Perbaikan 4.7.3
+
+- **Mixer per-part di export benar**: `renderOffline()` dulu menulis `gain`/`pan` langsung (nilai part terakhir menang untuk seluruh lagu). Sekarang dijadwalkan di tiap batas bar dengan `setValueAtTime(value, barStart)`, jadi volume/pan/mute/solo part A/B/C/D berubah tepat saat part berganti, sama seperti realtime.
+- **Kick yang di-mute atau ter-exclude solo tidak lagi memicu duck**: blok sidechain untuk bass stem kini memeriksa `!tr.mute && (!anySolo || tr.solo)` sebelum menjadikan kick sebagai trigger, konsisten dengan full mix.
+
+## Perbaikan 4.7.2
+
+- **Lock menutup celah keyboard**: aktivasi step via Space/Enter (`e.detail===0`) kini menghormati `tr.locked`, bukan hanya klik pointer.
+- **Parity level export**: `renderOffline` memakai gain master yang sama dengan realtime (0.82), jadi WAV/stem tidak lagi lebih keras dari yang terdengar saat Play.
+- **Stem bass mengikuti sidechain**: saat mengekspor stem bass (atau track lain) dengan Duck aktif, kick dari part lain memicu duck yang terdengar di bus, jadi stem mencerminkan mix terproses, bukan terisolasi-dry.
+- **Meter benar-benar start/stop**: loop `requestAnimationFrame` untuk oscilloscope/VU hanya hidup saat playing atau preview dan dihentikan saat Stop, tab disembunyikan, atau preview selesai.
+- Catatan desain: membuka shared link lalu tidak mengedit apa pun tidak menimpa project lokal (hash dibersihkan setelah dibaca, `restoring` mencegah autosave) — disengaja agar link orang lain aman dibuka.
+
+## Perbaikan 4.7.1
+
+- **Share link tidak lagi menyandera reload**: **Copy share link** tidak mengubah address bar, dan setelah link dibuka hash dibersihkan (dengan penanda sesi sebagai cadangan) sehingga edit setelah membuka link tetap menang saat reload.
+- **Autosave menyeluruh**: perubahan BPM, swing, echo, duck, mixer, slider Sound, microtiming, dan chain/key/scale kini memakai `markDirty()` terpusat, bukan hanya bergantung pada render.
+- **Parity export**: WAV/stem offline sekarang menyertakan master echo dan sidechain duck, jadi hasil render sama dengan yang terdengar saat Play.
+- **Gesture mobile**: sentuhan satu jari menggulir/mengetuk; long-press membuka editor; drag-paint dibatasi untuk mouse/pen.
+- **Lock konsisten**: row terkunci tidak bisa di-paint atau diedit dari popover/Step; popover menawarkan **Unlock track**.
+- **MIDI**: export memakai format 1 (satu track per baris + conductor) dengan drum di channel 10 General MIDI; track melodik menghindari channel 10.
+- **Performa**: oscilloscope dan VU meter hanya berjalan saat playing atau preview, dan berhenti saat tab tidak aktif.
+- Link share terkompresi memakai `deflate-raw`; browser tanpa `DecompressionStream` diberi pesan jelas alih-alih diam-diam membuka autosave.
+
+## Baru di 4.7.0
+
+- **Autosave & restore**: project otomatis tersimpan di browser dan dipulihkan saat dibuka lagi; mode More/easy juga diingat
+- **Undo berlabel**: toast undo/redo menyebut aksi yang dibatalkan (mis. "Undo: Mute")
+- **Editor step popover**: klik-kanan (atau long-press) pada step membuka velocity, probability, microtiming, note, slice, copy/paste, dan audition tanpa pindah tab
+- **Paint gesture**: drag melintasi grid untuk menyalakan/mematikan banyak step; **Alt+drag** mengatur velocity secara vertikal; Shift+klik tetap memutar strength
+- **Master oscilloscope** di status bar dan **VU meter per track** di mixer
+- **Share link**: seluruh pola dikodekan ke URL (`#p=...`) dan bisa disalin lewat **Copy share link**
+- **Waveform sampler**: bentuk gelombang dengan 16 pembatas slice; klik area untuk menetapkan slice ke step aktif
+- **Export MIDI**: file `.mid` standar dari chain A–D, termasuk swing dan microtiming
+- **Master echo** (send delay) dan **sidechain Duck** (kick menekan bass) untuk kedalaman mix
+- **Forge flash**: step yang dihasilkan berkedip singkat sebagai umpan balik visual; chip prompt cepat di panel Idea
+- aksen warna per-role pada baris track dan indikator velocity di dalam step
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -163,4 +177,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.9.6**.
+Versi saat ini: **4.10.0**.

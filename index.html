@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.9.6 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.10.0 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.9.6 — authoritative BPM ===== */
+/* ===== LOOPFORGE-16 v4.10.0 — multi-provider AI ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -437,14 +437,22 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
             <div class="grid2"><button id="applyEuclid" class="btn">Apply rhythm</button><button id="humanizeTrack" class="btn">Humanize</button></div>
           </div></details>
           <details class="morebox advanced-only" id="aiBox"><summary>AI — describe it, code decides</summary><div class="inside">
-            <p class="small">BYO OpenAI key. The key stays in this browser only and is sent directly to OpenAI — never through any LOOPFORGE server. This is a personal-use convenience, not secure storage: any code on this origin or a browser extension could read it.</p>
-            <label class="control">OpenAI API key<input id="aiKey" type="password" autocomplete="off" placeholder="sk-..."></label>
-            <label class="control" style="margin-top:6px">Model<input id="aiModel" value="gpt-4o-mini"></label>
+            <p class="small">Bring your own key. It stays in this browser only and is sent <b>directly to the endpoint you configure</b> — never through any LOOPFORGE server. This is a personal-use convenience, not secure storage: any code on this origin, a browser extension, or device access could read it. A custom endpoint is a trust boundary — your key goes to whatever URL you set here.</p>
+            <label class="control">Connection<select id="aiProfile"></select></label>
             <div class="grid2" style="margin-top:6px">
-              <button id="aiTest" class="btn">Test key</button>
+              <button id="aiAddProfile" class="btn">New connection</button>
+              <button id="aiRemoveProfile" class="btn danger">Remove</button>
+            </div>
+            <label class="control" style="margin-top:6px">Connection name<input id="aiName" maxlength="32" placeholder="OpenAI"></label>
+            <label class="control" style="margin-top:6px">Chat endpoint (full URL)<input id="aiEndpoint" spellcheck="false" placeholder="https://api.openai.com/v1/chat/completions"></label>
+            <label class="control" style="margin-top:6px">Model<input id="aiModel" placeholder="gpt-4o-mini"></label>
+            <label class="control" style="margin-top:6px">API key<input id="aiKey" type="password" autocomplete="off" placeholder="sk-..."></label>
+            <div class="grid2" style="margin-top:6px">
+              <button id="aiTest" class="btn">Test connection</button>
               <button id="aiForget" class="btn">Forget key</button>
             </div>
-            <label class="autosnap" style="cursor:pointer"><input type="checkbox" id="aiRemember">Remember for this tab (sessionStorage)</label>
+            <label class="autosnap" style="cursor:pointer"><input type="checkbox" id="aiRemember">Remember this key for this tab (sessionStorage)</label>
+            <p class="small" id="aiEndpointWarn" style="display:none"></p>
             <label class="control" style="margin-top:8px">What do you want?<textarea id="aiPrompt" rows="2" placeholder="dark sparse bass, keep the drums"></textarea></label>
             <div class="grid2" style="margin-top:6px"><button id="aiAsk" class="btn primary">Ask AI</button><button id="aiApply" class="btn" disabled>Apply proposal</button></div>
             <div id="aiStatus" class="genresult">AI off. Add a key to let the model choose parameters; the local generator still writes the notes.</div>
@@ -547,7 +555,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.9.6', STEPS=16, TRACKS=16;
+const APP_VERSION='4.10.0', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1311,11 +1319,94 @@ function describeIntent(x,target){return`${x.style} · density ${Math.round(x.de
    ========================================================================= */
 
 /* ---- SecretStore: memory by default, sessionStorage only if user opts in ---- */
+/* SecretStore: per-profile-id secrets. Memory-only by default; sessionStorage
+   opt-in per profile. Keys never cross profiles and never leave the browser. */
 const SecretStore={
-  _mem:null,
-  get(){if(this._mem)return this._mem;try{if(sessionStorage.getItem('loopforge-ai-remember')==='1'){const v=sessionStorage.getItem('loopforge-ai-key');if(v){this._mem=v;return v}}}catch(_){}return null},
-  set(key){this._mem=key||null;try{if($('#aiRemember').checked){sessionStorage.setItem('loopforge-ai-key',key);sessionStorage.setItem('loopforge-ai-remember','1')}else{sessionStorage.removeItem('loopforge-ai-key');sessionStorage.removeItem('loopforge-ai-remember')}}catch(_){}},
-  clear(){this._mem=null;try{sessionStorage.removeItem('loopforge-ai-key');sessionStorage.removeItem('loopforge-ai-remember')}catch(_){}}
+  _mem:{},                                  // {profileId: key}
+  _sessKey(id){return 'loopforge-ai-key|'+id},
+  _sessFlag(id){return 'loopforge-ai-remember|'+id},
+  get(id){if(!id)return null;
+    if(this._mem[id])return this._mem[id];
+    try{if(sessionStorage.getItem(this._sessFlag(id))==='1'){const v=sessionStorage.getItem(this._sessKey(id));if(v){this._mem[id]=v;return v}}}catch(_){}
+    return null},
+  set(id,key,remember){if(!id)return;
+    if(key)this._mem[id]=key;else delete this._mem[id];
+    try{
+      if(remember&&key){sessionStorage.setItem(this._sessKey(id),key);sessionStorage.setItem(this._sessFlag(id),'1')}
+      else{sessionStorage.removeItem(this._sessKey(id));sessionStorage.removeItem(this._sessFlag(id))}
+    }catch(_){}},
+  remembered(id){try{return sessionStorage.getItem(this._sessFlag(id))==='1'}catch(_){return false}},
+  clear(id){if(!id)return;delete this._mem[id];
+    try{sessionStorage.removeItem(this._sessKey(id));sessionStorage.removeItem(this._sessFlag(id))}catch(_){}}
+};
+
+/* ProfileStore: NON-secret connection config. May persist in localStorage but
+   is deliberately NOT part of projectData / export / share / history. */
+const PROFILES_KEY='loopforge-ai-profiles';
+const ACTIVE_PROFILE_KEY='loopforge-ai-active';
+const DEFAULT_PROFILE={
+  id:'openai',
+  name:'OpenAI',
+  endpoint:'https://api.openai.com/v1/chat/completions',
+  model:'gpt-4o-mini',
+  protocol:'openai-chat'
+};
+function newProfileId(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+// Endpoint safety: full URL required, no inference of paths. HTTPS only, HTTP only
+// for localhost dev. Reject user:pass@ credentials and non-http(s) schemes.
+function validateEndpoint(raw){
+  let url;
+  try{url=new URL(raw)}catch(_){return {ok:false,error:'Endpoint is not a valid URL'}}
+  if(url.protocol!=='https:'&&url.protocol!=='http:')return {ok:false,error:'Endpoint must be http(s)'}
+  if(url.username||url.password)return {ok:false,error:'Endpoint must not contain user:pass@ credentials'}
+  const host=url.hostname.toLowerCase();
+  const isLocal=host==='localhost'||host==='127.0.0.1'||host==='[::1]'||host==='::1';
+  if(url.protocol==='http:'&&!isLocal)return {ok:false,error:'Plain HTTP is only allowed for localhost'}
+  return {ok:true,url:url.toString()}
+}
+const ProfileStore={
+  list:[],
+  activeId:DEFAULT_PROFILE.id,
+  _sanitize(p){
+    if(!p||typeof p!=='object')return null;
+    const ep=validateEndpoint(String(p.endpoint||''));
+    if(!ep.ok)return null;
+    const model=String(p.model||'').trim();if(!model)return null;
+    return {id:String(p.id||newProfileId()),name:String(p.name||'Connection').slice(0,32),endpoint:ep.url,model,protocol:'openai-chat'}
+  },
+  load(){
+    try{
+      const raw=JSON.parse(localStorage.getItem(PROFILES_KEY)||'null');
+      const arr=Array.isArray(raw)?raw.map(p=>this._sanitize(p)).filter(Boolean):[];
+      this.list=arr.length?arr:[Object.assign({},DEFAULT_PROFILE)];
+      const a=localStorage.getItem(ACTIVE_PROFILE_KEY);
+      this.activeId=this.list.some(p=>p.id===a)?a:this.list[0].id
+    }catch(_){this.list=[Object.assign({},DEFAULT_PROFILE)];this.activeId=DEFAULT_PROFILE.id}
+    return this
+  },
+  save(){
+    try{localStorage.setItem(PROFILES_KEY,JSON.stringify(this.list));localStorage.setItem(ACTIVE_PROFILE_KEY,this.activeId)}catch(_){}
+  },
+  active(){return this.list.find(p=>p.id===this.activeId)||this.list[0]},
+  add(p){
+    const s=this._sanitize(p);if(!s)return null;
+    this.list.push(s);this.activeId=s.id;this.save();return s
+  },
+  update(id,patch){
+    const i=this.list.findIndex(p=>p.id===id);if(i<0)return null;
+    const merged=this._sanitize(Object.assign({},this.list[i],patch));
+    if(!merged)return null;
+    merged.id=id;this.list[i]=merged;this.save();return merged
+  },
+  remove(id){
+    if(this.list.length<=1)return false;
+    const i=this.list.findIndex(p=>p.id===id);if(i<0)return false;
+    this.list.splice(i,1);
+    try{sessionStorage.removeItem('loopforge-ai-key|'+id);sessionStorage.removeItem('loopforge-ai-remember|'+id)}catch(_){}
+    delete SecretStore._mem[id];
+    if(this.activeId===id)this.activeId=this.list[0].id;
+    this.save();return true
+  }
 };
 
 /* ---- AIValidator: strict schema. Unknown fields are rejected, not ignored. ---- */
@@ -1373,8 +1464,13 @@ function describeDecision(d){
   return 'target '+d.target+' · '+d.style+' · density '+Math.round(d.density*100)+'% · sync '+Math.round(d.syncopation*100)+'% · humanize '+d.humanizeMs+' ms · variation '+Math.round(d.variation*100)+'% · preserve '+(d.preserve.length?d.preserve.join('+'):'none')
 }
 
-/* ---- ProviderAdapter: OpenAI official endpoint only, raw fetch, no SDK ---- */
-const OPENAI_ENDPOINT='https://api.openai.com/v1/chat/completions';
+/* ---- ProviderAdapter: ONE OpenAI-compatible Chat Completions adapter.
+   The endpoint is always the FULL configured chat URL — never inferred or
+   path-appended. Request body uses only the universally-compatible subset:
+   model, messages, temperature. response_format is NOT required (many
+   OpenAI-compatible servers reject it); JSON is enforced by extractJson +
+   AIValidator on the response side instead. ---- */
+function aiActiveProfile(){return ProfileStore.active()}
 function aiSystemPrompt(){
   return 'You translate a musician\'s plain-language request into strict JSON parameters. '
     +'You never write notes or rhythms yourself. Reply with ONE JSON object and nothing else.\n'
@@ -1387,20 +1483,34 @@ function aiStateSummary(){
   const ts=tracks(),anySolo=ts.some(t=>t.solo);
   return ts.map((tr,i)=>String(i+1).padStart(2,'0')+' '+tr.name+' ['+(tr.role||tr.type)+']'+(tr.locked?' LOCKED':'')+(tr.mute?' muted':'')+(anySolo&&tr.solo?' solo':'')+' steps='+tr.steps.filter(s=>s.v).length+(isPitchedTrack(tr)?' notes='+noteEvents(tr).length:'')).join('\n')
 }
-function aiBuildPayload(prompt){
+function aiBuildPayload(prompt,profile){
   return {
-    model:($('#aiModel').value||'gpt-4o-mini').trim(),
+    model:profile.model,
     messages:[{role:'system',content:aiSystemPrompt()},{role:'user',content:'Request: '+prompt+'\n\nCurrent part '+currentPattern+' (key '+$('#key').value+' '+$('#scale').value+'):\n'+aiStateSummary()}],
-    temperature:0.2,
-    response_format:{type:'json_object'}
+    temperature:0.2
   }
 }
-async function openAIChat(payload,key,signal){
-  const res=await fetch(OPENAI_ENDPOINT,{method:'POST',signal,headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(payload)});
-  if(!res.ok){let detail='';try{detail=(await res.json()).error?.message||''}catch(_){}throw new Error('OpenAI '+res.status+(detail?' — '+detail:''))}
-  const data=await res.json();
+function aiErrorFor(status,detail,profile){
+  const who=profile.name||'provider';
+  if(status===401||status===403)return who+': key rejected ('+status+'). '+detail
+  if(status===404)return who+': endpoint or model not found (404). Check the full chat URL and model name. '+detail
+  if(status===429)return who+': rate limited (429). Wait and retry. '+detail
+  if(status>=500)return who+': server error ('+status+'). '+detail
+  return who+' '+status+(detail?' — '+detail:'')
+}
+async function providerChat(payload,key,profile,signal){
+  let res;
+  try{
+    res=await fetch(profile.endpoint,{method:'POST',signal,redirect:'error',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(payload)})
+  }catch(e){
+    if(e&&e.name==='AbortError')throw e;
+    // fetch throws TypeError for network/CORS failures — surface something actionable
+    throw new Error('Network/CORS error reaching '+profile.name+'. Check the endpoint URL and that the server allows browser requests.')
+  }
+  if(!res.ok){let detail='';try{detail=((await res.json()).error?.message)||''}catch(_){}throw new Error(aiErrorFor(res.status,detail,profile))}
+  let data;try{data=await res.json()}catch(_){throw new Error(profile.name+': response was not JSON')}
   const content=data?.choices?.[0]?.message?.content;
-  if(!content)throw new Error('Empty response from OpenAI');
+  if(!content)throw new Error(profile.name+': no message content in response');
   return content
 }
 function extractJson(text){
@@ -1537,10 +1647,28 @@ function humanizeTrackRef(tr,i,amt){
   else tr.steps.forEach(st=>{if(st.v){st.shift=rnd();if(chance(velChance))st.v=clamp(st.v+(chance(.5)?1:-1),1,3)}});
 }
 function setAiStatus(msg,warn){const el=$('#aiStatus');if(el){el.textContent=msg;el.classList.toggle('ai-warn',!!warn)}}
+function refreshProfileSelect(){
+  const sel=$('#aiProfile');if(!sel)return;
+  sel.innerHTML=ProfileStore.list.map(p=>'<option value="'+escHtml(p.id)+'"'+(p.id===ProfileStore.activeId?' selected':'')+'>'+escHtml(p.name)+'</option>').join('')
+}
+function isCustomEndpoint(profile){
+  try{return new URL(profile.endpoint).hostname.toLowerCase()!=='api.openai.com'}catch(_){return true}
+}
+function loadProfileIntoForm(){
+  const p=aiActiveProfile();if(!p)return;
+  $('#aiName').value=p.name;$('#aiEndpoint').value=p.endpoint;$('#aiModel').value=p.model;
+  const saved=SecretStore.get(p.id);
+  $('#aiKey').value=saved||'';$('#aiRemember').checked=SecretStore.remembered(p.id);
+  const warn=$('#aiEndpointWarn');
+  if(isCustomEndpoint(p)){warn.style.display='block';warn.textContent='Custom endpoint: your API key will be sent to '+p.endpoint+' — only use URLs you trust.'}
+  else warn.style.display='none';
+  $('#aiRemoveProfile').disabled=ProfileStore.list.length<=1
+}
 function refreshAiUI(){
-  const has=!!SecretStore.get();
+  const p=aiActiveProfile();
+  const has=!!SecretStore.get(p.id);
   $('#aiApply').disabled=!aiProposal;
-  if(!has)setAiStatus('AI off. Add a key to let the model choose parameters; the local generator still writes the notes.');
+  if(!has)setAiStatus('AI off. Add a key for “'+p.name+'” to let the model choose parameters; the local generator still writes the notes.');
 }
 function invalidateAiRequests(){aiRequestId++;if(aiAbort){try{aiAbort.abort()}catch(_){}aiAbort=null}}
 // Context fingerprint captures what Apply depends on: the active part, the key/scale,
@@ -1567,36 +1695,41 @@ function beginAiRequest(){
 }
 function aiForget(){
   invalidateAiRequests();
-  SecretStore.clear();aiProposal=null;$('#aiKey').value='';$('#aiRemember').checked=false;
+  const p=aiActiveProfile();
+  SecretStore.clear(p.id);aiProposal=null;$('#aiKey').value='';$('#aiRemember').checked=false;
   $('#aiSent').textContent='—';$('#aiProposal').textContent='—';
-  setAiStatus('Key forgotten. AI off.');refreshAiUI()
+  setAiStatus('Key forgotten for '+p.name+'.');refreshAiUI()
 }
 async function aiTest(){
-  const key=SecretStore.get();if(!key)return toast('Add a key first');
-  setAiStatus('Testing key…');
+  const profile=aiActiveProfile(),key=SecretStore.get(profile.id);
+  if(!key)return toast('Add a key for this connection first');
+  setAiStatus('Testing connection…');
   const {id,controller}=beginAiRequest();
   const t=setTimeout(()=>controller.abort(),12000);
   try{
-    const payload={model:($('#aiModel').value||'gpt-4o-mini').trim(),messages:[{role:'user',content:'reply with the single word ok'}],max_tokens:5};
-    await openAIChat(payload,key,controller.signal);
+    // Test via the CONFIGURED chat endpoint, not /models.
+    const payload={model:profile.model,messages:[{role:'user',content:'Reply with the single word ok.'}],temperature:0};
+    await providerChat(payload,key,profile,controller.signal);
     if(id!==aiRequestId)return;
-    setAiStatus('Key OK. Ready.')
-  }catch(e){if(id!==aiRequestId)return;setAiStatus('Key test failed: '+e.message,true)}
+    setAiStatus('Connection OK. Ready.')
+  }catch(e){if(id!==aiRequestId)return;setAiStatus('Connection test failed: '+(e.name==='AbortError'?'timed out':e.message),true)}
   finally{clearTimeout(t);if(aiAbort===controller)aiAbort=null}
 }
 async function aiAsk(){
-  const key=SecretStore.get();if(!key)return toast('Add an OpenAI key first');
+  const profile=aiActiveProfile(),key=SecretStore.get(profile.id);
+  if(!key)return toast('Add a key for this connection first');
   const prompt=$('#aiPrompt').value.trim();if(!prompt)return toast('Describe what you want first');
-  setAiStatus('Asking the model for parameters…');
+  setAiStatus('Asking '+profile.name+' for parameters…');
   aiProposal=null;$('#aiApply').disabled=true;
-  const payload=aiBuildPayload(prompt);
+  const payload=aiBuildPayload(prompt,profile);
   const context=aiContextSnapshot();
-  $('#aiSent').textContent=JSON.stringify({endpoint:OPENAI_ENDPOINT,body:payload},null,2);
+  // Preview shows the EXACT endpoint and the sanitized body (never the key).
+  $('#aiSent').textContent=JSON.stringify({endpoint:profile.endpoint,body:payload},null,2);
   const {id,controller}=beginAiRequest();
   const t=setTimeout(()=>controller.abort(),20000);
   try{
-    const content=await openAIChat(payload,key,controller.signal);
-    if(id!==aiRequestId)return;             // a newer request (or Forget) superseded us
+    const content=await providerChat(payload,key,profile,controller.signal);
+    if(id!==aiRequestId)return;             // a newer request (or Forget/switch) superseded us
     const parsed=extractJson(content);
     const v=AIValidator(parsed);
     if(!v.ok){$('#aiProposal').textContent='Rejected by validator: '+v.error;setAiStatus('Model output rejected — nothing applied. You can use the local generator instead.',true);return}
@@ -1624,13 +1757,41 @@ function aiApply(){
   setAiStatus('Applied via local generator · '+describeDecision(d)+' · '+res.applied+' track(s). One Undo reverts it.');
   aiProposal=null;$('#aiApply').disabled=true
 }
+function switchProfile(id){
+  invalidateAiRequests();                       // abort any in-flight request for the old profile
+  aiProposal=null;$('#aiApply').disabled=true;
+  ProfileStore.activeId=id;ProfileStore.save();
+  loadProfileIntoForm();refreshAiUI();refreshProfileSelect()
+}
 function bindAI(){
   if(!$('#aiBox'))return;
+  ProfileStore.load();
+  refreshProfileSelect();loadProfileIntoForm();
   const keyEl=$('#aiKey'),rem=$('#aiRemember');
-  const saved=SecretStore.get();
-  if(saved){keyEl.value=saved;rem.checked=true}
-  keyEl.addEventListener('input',()=>{SecretStore.set(keyEl.value.trim());refreshAiUI()});
-  rem.addEventListener('change',()=>{SecretStore.set(keyEl.value.trim());toast(rem.checked?'Key kept for this tab only':'Key kept in memory only')});
+  $('#aiProfile').addEventListener('change',e=>{switchProfile(e.target.value);toast('Connection: '+aiActiveProfile().name)});
+  keyEl.addEventListener('input',()=>{SecretStore.set(ProfileStore.activeId,keyEl.value.trim(),rem.checked);refreshAiUI()});
+  rem.addEventListener('change',()=>{SecretStore.set(ProfileStore.activeId,keyEl.value.trim(),rem.checked);toast(rem.checked?'Key kept for this tab only':'Key kept in memory only')});
+  // Non-secret config edits persist to the profile (never to project/share/export).
+  const saveCfg=()=>{
+    const round=validateEndpoint($('#aiEndpoint').value.trim());
+    if(!round.ok){$('#aiEndpointWarn').style.display='block';$('#aiEndpointWarn').textContent='Endpoint not saved: '+round.error;return}
+    ProfileStore.update(ProfileStore.activeId,{name:$('#aiName').value.trim()||'Connection',endpoint:round.url,model:$('#aiModel').value.trim()});
+    refreshProfileSelect();loadProfileIntoForm()
+  };
+  $('#aiName').addEventListener('change',saveCfg);
+  $('#aiModel').addEventListener('change',saveCfg);
+  $('#aiEndpoint').addEventListener('change',saveCfg);
+  $('#aiAddProfile').onclick=()=>{
+    const p=ProfileStore.add({name:'New connection',endpoint:'https://api.openai.com/v1/chat/completions',model:'gpt-4o-mini'});
+    if(!p)return toast('Could not add connection');
+    refreshProfileSelect();loadProfileIntoForm();refreshAiUI();toast('Connection added')
+  };
+  $('#aiRemoveProfile').onclick=()=>{
+    const p=aiActiveProfile();
+    if(ProfileStore.list.length<=1)return toast('Keep at least one connection');
+    if(!confirm('Remove connection “'+p.name+'” and forget its key?'))return;
+    ProfileStore.remove(p.id);switchProfile(ProfileStore.activeId);toast('Connection removed')
+  };
   $('#aiTest').onclick=aiTest;$('#aiForget').onclick=aiForget;$('#aiAsk').onclick=aiAsk;$('#aiApply').onclick=aiApply;
   refreshAiUI()
 }
