@@ -39,10 +39,20 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - **Satu entry point**: tombol **Generate** di topbar (menggantikan "New part"). Tombol **Blank loop** tetap.
 - **Generator jadi satu dialog/modal** (responsif, mobile-friendly) dengan **dua engine**: **Native** (default, jalan tanpa network/key) dan **LLM**. Keduanya adalah engine dari konsep yang sama, bukan subsystem terpisah.
 - **Tab "Idea" di sidebar dihapus.** Sidebar kini hanya Sound / Step(advanced) / Mix / Save.
-- **Kontrol dipusatkan di dialog**: What do you want? (satu textarea bersama), Target/scope (current part atau A–D + target role), Feel (Style, Density, Key, Scale, Similar/Wild), Action (New idea / Variation / Fill gaps), serta primary **Generate current** dan **Generate A–D**. Rhythm tools (Euclid/Humanize) pindah ke collapsible **More controls**.
+- **Kontrol dipusatkan di dialog**: What do you want? (satu textarea bersama), Target/scope (current part atau A–D + target role), Feel (Style, Density, Key, Scale, Similar/Wild), Action (New idea / Variation / Fill gaps), serta **satu CTA workflow** di footer. Rhythm tools (Euclid/Humanize) pindah ke collapsible **More controls**.
+- **Satu CTA generation saja.** Connection config **tidak** lagi punya tombol Ask/Apply — LLM connection hanya berisi profile, add/remove, name, endpoint, model, API key, remember, Test connection, Forget key, dan warning/security. Tombol **Generate A–D** yang terpisah dihapus: **scope selector yang otoritatif**. Footer menampilkan tepat satu label sesuai state:
+  - Native + Current → **[ Generate ]**
+  - Native + A–D → **[ Generate A–D ]**
+  - LLM + Current (belum ada proposal) → **[ Ask LLM ]**
+  - LLM + A–D → **[ LLM A–D not available yet ]** (disabled, jujur — bukan fallback diam-diam ke Native)
+  - LLM + proposal siap → **[ Apply proposal ]**, lalu kembali ke **Ask LLM** setelah Apply.
+- **Preview di luar connection settings.** "Preview what is sent & what is proposed" pindah ke collapsible dekat footer/main flow. Saat **Ask LLM** diklik, `aiSent` **langsung terisi sebelum fetch**, preview **auto-open**, "Proposed locally" menampilkan **Waiting for provider...**, lalu jadi proposal (sukses) atau pesan error (rejected/gagal). Preview tidak pernah terlihat "tidak terjadi apa-apa".
+- **Status LLM eksplisit (state machine)**: `no key` → **"No key for <profile>"**, `has key` → **"Ready · <profile> / <model>"**, plus state testing / asking / proposal ready / error / applied. Teks "LLM off" tidak lagi muncul saat SecretStore sudah punya key.
+- **Action hanya untuk Native.** Di Engine=LLM tombol New idea / Variation / Fill gaps **disembunyikan** — karena keduanya hanya memanggil `aiAsk()` yang sama (tidak punya semantik berbeda) dan Fill gaps hanya toast Native. Mode 1 LLM tetap typed reshape.
+- **Konsistensi visual tanpa design language baru.** Prompt field dibungkus `label.control` sehingga memakai styling form LOOPFORGE yang sudah ada (`--surface-2`/`--text`/`--border`/`--radius-sm`, focus `--accent-2`, `resize:vertical`). Modal body dan `.aipre` memakai scrollbar **tipis & bertema** (`scrollbar-width:thin` + `scrollbar-color` untuk Firefox, dan `::-webkit-scrollbar` 8px untuk WebKit) — bukan scrollbar browser-default yang terang.
 - **LLM config bersih**: saat Engine=Native seluruh noise API/key disembunyikan; saat Engine=LLM muncul **LLM connection** (profile, name, endpoint, model, key, remember, test, forget) sebagai collapsible inline — bukan modal bersarang.
-- **Arsitektur**: Native (`controls`/`parseIntent`) dan LLM (`prompt → provider → extractJson → AIValidator → AISemanticValidate`) sama-sama menghasilkan **GeneratorDecision** lalu lewat **LocalExecutor** yang sama. Tidak ada executor duplikat.
-- **Backward compatible**: perilaku generator lokal, AI Mode 1, profile/security, schema project/share/export, dan transport/audio tidak berubah. Membuka dialog tidak mengubah project; satu Generate = satu checkpoint/Undo. Dialog bisa ditutup via Escape, tombol ×, dan backdrop.
+- **Arsitektur**: Native (`controls`/`parseIntent`) dan LLM (`prompt → provider → extractJson → AIValidator → AISemanticValidate`) sama-sama menghasilkan **GeneratorDecision** lalu lewat **LocalExecutor** yang sama. Tidak ada executor duplikat, dan **tidak ada silent engine switch**: memilih LLM + A–D tidak pernah menjalankan `generateAllParts()` Native.
+- **Backward compatible**: perilaku generator lokal, AI Mode 1, profile/security, schema project/share/export, dan transport/audio tidak berubah. Membuka dialog tidak mengubah project; satu Generate = satu checkpoint/Undo. Dialog bisa ditutup via Escape, tombol ×, backdrop, dan tombol **Close**.
 
 ### Perbaikan 4.10.1 (semantik preserve Mode 1)
 

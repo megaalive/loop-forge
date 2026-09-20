@@ -302,6 +302,20 @@ kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;pad
 .gen-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .gen-actions.three{grid-template-columns:repeat(3,1fr)}
 .gen-hint{font-size:10.5px;color:var(--text-dim);margin-top:6px;line-height:1.5}
+/* Prompt field reuses the existing LOOPFORGE form language: it is inside
+   label.control, so the shared input/select/textarea rule already themes it.
+   Only the textarea-specific sizing lives here — no new colour tokens. */
+#genPrompt{width:100%;resize:vertical;min-height:64px;font-weight:600;line-height:1.5}
+#genPrompt::placeholder{color:var(--text-faint)}
+/* Themed scrollbars for the dialog body and the LLM preview panes.
+   Track follows surface, thumb follows border-strong/text-faint, hover brightens. */
+.genmodal-body,.aipre{scrollbar-width:thin;scrollbar-color:var(--border-strong) var(--surface-2)}
+.genmodal-body::-webkit-scrollbar,.aipre::-webkit-scrollbar{width:8px;height:8px}
+.genmodal-body::-webkit-scrollbar-track,.aipre::-webkit-scrollbar-track{background:var(--surface-2);border-radius:8px}
+.genmodal-body::-webkit-scrollbar-thumb,.aipre::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:8px}
+.genmodal-body::-webkit-scrollbar-thumb:hover,.aipre::-webkit-scrollbar-thumb:hover{background:var(--text-faint)}
+.genmodal-body::-webkit-scrollbar-corner,.aipre::-webkit-scrollbar-corner{background:var(--surface-2)}
+#genRunPrimary:disabled{cursor:not-allowed;opacity:.55}
 @media (max-width:520px){
   .genmodal.open{padding:0}
   .genmodal-card{max-height:100dvh;border-radius:0;width:100%}
@@ -520,7 +534,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 
         <div class="gen-sec">
           <div class="gen-h">What do you want?</div>
-          <textarea id="genPrompt" rows="3" placeholder="dark sparse bass; keep the drums"></textarea>
+          <label class="control">Prompt<textarea id="genPrompt" rows="3" placeholder="dark sparse bass; keep the drums"></textarea></label>
           <div class="chips" id="promptChips">
             <button data-w="dark">dark</button><button data-w="driving">driving</button>
             <button data-w="sparse">sparse</button><button data-w="busy">busy</button>
@@ -528,7 +542,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
             <button data-w="syncopated">syncopated</button><button data-w="jaipong">jaipong</button>
             <button data-w="keep drums">keep drums</button><button data-w="keep bass">keep bass</button>
           </div>
-          <div class="gen-hint">Native reads this text locally. Switch to LLM to let a model turn it into parameters.</div>
+          <div class="gen-hint">Native reads this text locally. LLM (Current part) sends it as a typed parameter request; the local generator still writes every note.</div>
         </div>
 
         <div class="gen-sec">
@@ -564,7 +578,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
           <label class="control">Similar ↔ Wild <span id="variVal">40%</span><input id="variAmount" type="range" min="0" max="100" value="40"></label>
         </div>
 
-        <div class="gen-sec">
+        <div class="gen-sec" id="genActionSec">
           <div class="gen-h">Action</div>
           <div class="gen-actions three">
             <button id="genActionNew" class="btn">New idea</button>
@@ -600,21 +614,21 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
           </div>
           <label class="autosnap" style="cursor:pointer"><input type="checkbox" id="aiRemember">Remember this key for this tab (sessionStorage)</label>
           <p class="small" id="aiEndpointWarn" style="display:none"></p>
-          <div class="gen-actions" style="margin-top:6px"><button id="aiAsk" class="btn primary">Ask LLM</button><button id="aiApply" class="btn" disabled>Apply proposal</button></div>
-          <div id="aiStatus" class="genresult">LLM off. Add a key to let the model choose parameters; the local generator still writes the notes.</div>
-          <details class="morebox" id="aiPrivacy" style="margin-top:8px"><summary>Preview what is sent &amp; what is proposed</summary><div class="inside">
-            <div class="small" style="margin-bottom:4px"><b>Sent to provider</b></div>
-            <pre id="aiSent" class="aipre">—</pre>
-            <div class="small" style="margin:6px 0 4px"><b>Proposed locally</b></div>
-            <pre id="aiProposal" class="aipre">—</pre>
-          </div></details>
+          <div id="aiStatus" class="genresult">Add a key to let the model choose parameters; the local generator still writes the notes.</div>
+        </div></details>
+
+        <details class="morebox" id="genLLMResult" style="display:none"><summary>Preview what is sent &amp; what is proposed</summary><div class="inside">
+          <div class="small" style="margin-bottom:4px"><b>Sent to provider</b></div>
+          <pre id="aiSent" class="aipre">—</pre>
+          <div class="small" style="margin:6px 0 4px"><b>Proposed locally</b></div>
+          <pre id="aiProposal" class="aipre">—</pre>
         </div></details>
 
         <div id="genResult" class="genresult">Changes stay editable. Locked tracks stay untouched.</div>
       </div>
       <div class="genmodal-foot">
-        <button id="genRunPrimary" class="btn primary" style="flex:1">Generate current</button>
-        <button id="genRunAll" class="btn" style="flex:1">Generate A–D</button>
+        <button id="genRunPrimary" class="btn primary" style="flex:1">Generate</button>
+        <button id="genModalCancel" class="btn" style="flex:0 0 auto">Close</button>
       </div>
     </div>
   </div>
@@ -1750,7 +1764,7 @@ function humanizeTrackRef(tr,i,amt){
   if(isPitchedTrack(tr)){noteEvents(tr).forEach(n=>{n.shift=rnd();if(chance(velChance))n.velocity=clamp(n.velocity+(chance(.5)?1:-1),1,3)})}
   else tr.steps.forEach(st=>{if(st.v){st.shift=rnd();if(chance(velChance))st.v=clamp(st.v+(chance(.5)?1:-1),1,3)}});
 }
-function setAiStatus(msg,warn){const el=$('#aiStatus');if(el){el.textContent=msg;el.classList.toggle('ai-warn',!!warn)}}
+/* AI status/phase helpers are defined further below, next to the state machine. */
 function refreshProfileSelect(){
   const sel=$('#aiProfile');if(!sel)return;
   sel.innerHTML=ProfileStore.list.map(p=>'<option value="'+escHtml(p.id)+'"'+(p.id===ProfileStore.activeId?' selected':'')+'>'+escHtml(p.name)+'</option>').join('')
@@ -1768,11 +1782,39 @@ function loadProfileIntoForm(){
   else warn.style.display='none';
   $('#aiRemoveProfile').disabled=ProfileStore.list.length<=1
 }
+/* AI status is a small explicit state machine so the panel can never claim
+   "off" while a key exists, and never hide an in-flight / failed request.
+   States: nokey · ready · testing · asking · proposal · error · applied. */
+let aiPhase='nokey';
+function aiPhaseText(){
+  const p=aiActiveProfile();
+  switch(aiPhase){
+    case 'testing':return 'Testing connection...'
+    case 'asking':return 'Asking '+p.name+' for parameters...'
+    case 'proposal':return 'Proposal ready · '+p.name+' / '+p.model+' — review it, then Apply. Nothing changed yet.'
+    case 'error':return aiLastError||'Request failed.'
+    case 'applied':return aiLastApplied||'Applied.'
+    default:return SecretStore.get(p.id)
+      ? 'Ready · '+p.name+' / '+p.model
+      : 'No key for \u201c'+p.name+'\u201d. Add one below to let the model choose parameters; the local generator still writes the notes.'
+  }
+}
+let aiLastError='',aiLastApplied='';
+function setAiPhase(phase,msg){
+  if(phase==='error')aiLastError=msg||'Request failed.';
+  if(phase==='applied')aiLastApplied=msg||'Applied.';
+  aiPhase=phase;
+  const el=$('#aiStatus');
+  if(el){el.textContent=aiPhaseText();el.classList.toggle('ai-warn',phase==='error')}
+  syncGenCTA();
+}
 function refreshAiUI(){
   const p=aiActiveProfile();
   const has=!!SecretStore.get(p.id);
-  $('#aiApply').disabled=!aiProposal;
-  if(!has)setAiStatus('AI off. Add a key for “'+p.name+'” to let the model choose parameters; the local generator still writes the notes.');
+  // A key change re-derives the idle status, but never clobbers an active
+  // testing/asking/proposal/error phase the user still needs to see.
+  if(aiPhase==='nokey'||aiPhase==='ready'||aiPhase==='applied')setAiPhase(has?'ready':'nokey');
+  else syncGenCTA();
 }
 function invalidateAiRequests(){aiRequestId++;if(aiAbort){try{aiAbort.abort()}catch(_){}aiAbort=null}}
 // Context fingerprint captures what Apply depends on: the active part, the key/scale,
@@ -1802,12 +1844,12 @@ function aiForget(){
   const p=aiActiveProfile();
   SecretStore.clear(p.id);aiProposal=null;$('#aiKey').value='';$('#aiRemember').checked=false;
   $('#aiSent').textContent='—';$('#aiProposal').textContent='—';
-  setAiStatus('Key forgotten for '+p.name+'.');refreshAiUI()
+  setAiPhase('nokey','Key forgotten for '+p.name+'.');
 }
 async function aiTest(){
   const profile=aiActiveProfile(),key=SecretStore.get(profile.id);
   if(!key)return toast('Add a key for this connection first');
-  setAiStatus('Testing connection…');
+  setAiPhase('testing');
   const {id,controller}=beginAiRequest();
   const t=setTimeout(()=>controller.abort(),12000);
   try{
@@ -1815,20 +1857,29 @@ async function aiTest(){
     const payload={model:profile.model,messages:[{role:'user',content:'Reply with the single word ok.'}],temperature:0};
     await providerChat(payload,key,profile,controller.signal);
     if(id!==aiRequestId)return;
-    setAiStatus('Connection OK. Ready.')
-  }catch(e){if(id!==aiRequestId)return;setAiStatus('Connection test failed: '+(e.name==='AbortError'?'timed out':e.message),true)}
+    setAiPhase('ready','Connection OK. Ready · '+profile.name+' / '+profile.model)
+  }catch(e){if(id!==aiRequestId)return;setAiPhase('error','Connection test failed: '+(e.name==='AbortError'?'timed out':e.message))}
   finally{clearTimeout(t);if(aiAbort===controller)aiAbort=null}
 }
+// aiAsk is the LLM producer. It ONLY runs for scope=current — A–D has no LLM
+// producer yet, so the CTA is disabled upstream and never silently falls back
+// to the native generator.
 async function aiAsk(){
   const profile=aiActiveProfile(),key=SecretStore.get(profile.id);
+  // Scope is checked FIRST so an A–D selection can never proceed on any engine.
+  if($('#genScope').value!=='current'){toast('LLM A\u2013D not available yet');syncGenCTA();return}
   if(!key)return toast('Add a key for this connection first');
   const prompt=$('#genPrompt').value.trim();if(!prompt)return toast('Describe what you want first');
-  setAiStatus('Asking '+profile.name+' for parameters…');
-  aiProposal=null;$('#aiApply').disabled=true;
+  aiProposal=null;
+  // The preview must never look like "nothing happened": it opens immediately and
+  // shows the WAITING state BEFORE the fetch is even issued.
   const payload=aiBuildPayload(prompt,profile);
   const context=aiContextSnapshot();
+  openLLMResult();
   // Preview shows the EXACT endpoint and the sanitized body (never the key).
   $('#aiSent').textContent=JSON.stringify({endpoint:profile.endpoint,body:payload},null,2);
+  $('#aiProposal').textContent='Waiting for provider...';
+  setAiPhase('asking');
   const {id,controller}=beginAiRequest();
   const t=setTimeout(()=>controller.abort(),20000);
   try{
@@ -1836,43 +1887,42 @@ async function aiAsk(){
     if(id!==aiRequestId)return;             // a newer request (or Forget/switch) superseded us
     const parsed=extractJson(content);
     const v=AIValidator(parsed);
-    if(!v.ok){$('#aiProposal').textContent='Rejected by validator: '+v.error;setAiStatus('Model output rejected — nothing applied. You can use the local generator instead.',true);return}
+    if(!v.ok){$('#aiProposal').textContent='Rejected by validator: '+v.error;setAiPhase('error','Model output rejected — nothing applied. You can use the local generator instead.');return}
     // Semantic check BEFORE enabling Apply: never show an impossible proposal as apply-able.
     const sem=AISemanticValidate(v.decision);
     if(!sem.ok){
       $('#aiProposal').textContent=describeDecision(v.decision)+'\n\nRejected: '+sem.error;
-      setAiStatus(sem.error,true);
-      aiProposal=null;$('#aiApply').disabled=true;return
+      aiProposal=null;setAiPhase('error',sem.error);return
     }
     aiProposal={decision:v.decision,context};
     $('#aiProposal').textContent=describeDecision(aiProposal.decision)+'\n\nWritable: '+sem.writable.length+' track(s)';
-    setAiStatus('Proposal ready. Review it, then Apply. Nothing changed yet.');
-    $('#aiApply').disabled=false
+    setAiPhase('proposal')
   }catch(e){
     if(id!==aiRequestId)return;
     const msg=e.name==='AbortError'?'Request cancelled or timed out':e.message;
     $('#aiProposal').textContent='No valid proposal: '+msg;
-    setAiStatus('AI unavailable — nothing applied. Use the local generator instead.',true)
+    openLLMResult();
+    setAiPhase('error','AI unavailable — nothing applied. Use the local generator instead.')
   }finally{clearTimeout(t);if(aiAbort===controller)aiAbort=null}
 }
 function aiApply(){
-  if(!aiProposal)return toast('Ask AI first');
+  if(!aiProposal)return toast('Ask the model first');
   if(aiContextChanged(aiProposal.context)){
-    $('#aiProposal').textContent='Proposal is stale — the part, key, scale, or tracks changed since it was made. Ask AI again.';
-    setAiStatus('Proposal is stale — ask AI again. Nothing applied.',true);
-    aiProposal=null;$('#aiApply').disabled=true;return
+    $('#aiProposal').textContent='Proposal is stale — the part, key, scale, or tracks changed since it was made. Ask again.';
+    aiProposal=null;setAiPhase('error','Proposal is stale — ask again. Nothing applied.');return
   }
   const d=aiProposal.decision;
   const res=localExecutorApply(aiProposal);
-  if(!res.applied){setAiStatus('AI proposal could not apply: '+res.reason,true);toast(res.reason);return}
-  setAiStatus('Applied via local generator · '+describeDecision(d)+' · '+res.applied+' track(s). One Undo reverts it.');
-  aiProposal=null;$('#aiApply').disabled=true
+  if(!res.applied){setAiPhase('error','Proposal could not apply: '+res.reason);toast(res.reason);return}
+  aiProposal=null;
+  setAiPhase('applied','Applied via local generator · '+describeDecision(d)+' · '+res.applied+' track(s). One Undo reverts it.')
 }
 function switchProfile(id){
   invalidateAiRequests();                       // abort any in-flight request for the old profile
-  aiProposal=null;$('#aiApply').disabled=true;
+  aiProposal=null;$('#aiSent').textContent='—';$('#aiProposal').textContent='—';
   ProfileStore.activeId=id;ProfileStore.save();
-  loadProfileIntoForm();refreshAiUI();refreshProfileSelect()
+  aiPhase=SecretStore.get(id)?'ready':'nokey';
+  loadProfileIntoForm();refreshProfileSelect();setAiPhase(aiPhase)
 }
 function bindAI(){
   if(!$('#aiBox'))return;
@@ -1903,7 +1953,8 @@ function bindAI(){
     if(!confirm('Remove connection “'+p.name+'” and forget its key?'))return;
     ProfileStore.remove(p.id);switchProfile(ProfileStore.activeId);toast('Connection removed')
   };
-  $('#aiTest').onclick=aiTest;$('#aiForget').onclick=aiForget;$('#aiAsk').onclick=aiAsk;$('#aiApply').onclick=aiApply;
+  // Connection config only — generation lives in the single footer CTA.
+  $('#aiTest').onclick=aiTest;$('#aiForget').onclick=aiForget;
   refreshAiUI()
 }
 
@@ -1913,6 +1964,29 @@ function bindAI(){
    No duplicated executor: the dialog only chooses which producer runs.
    ========================================================================= */
 let genEngine='native';
+// Scope is authoritative: it alone decides Current vs A–D. There is deliberately
+// NO separate "Generate A–D" button — one footer CTA reflects engine + scope + state.
+function genScope(){return $('#genScope').value==='all'?'all':'current'}
+function openLLMResult(open){
+  const box=$('#genLLMResult');if(!box)return;
+  box.style.display='block';
+  if(open!==false)box.open=true;
+}
+// The single workflow CTA. Its label/handler is a pure function of
+// (engine, scope, proposal state) — never a hidden fallback between engines.
+function syncGenCTA(){
+  const btn=$('#genRunPrimary');if(!btn)return;
+  const llm=genEngine==='llm',scope=genScope();
+  const act=$('#genActionSec');if(act)act.style.display=llm?'none':'';
+  if(!llm){
+    btn.textContent=scope==='all'?'Generate A\u2013D':'Generate';
+    btn.disabled=false;btn.title='';
+    return
+  }
+  if(aiProposal){btn.textContent='Apply proposal';btn.disabled=false;btn.title='Apply the proposed parameters via the local generator'}
+  else if(scope==='all'){btn.textContent='LLM A\u2013D not available yet';btn.disabled=true;btn.title='Whole-song LLM generation is not implemented; use the Native engine for A\u2013D'}
+  else{btn.textContent='Ask LLM';btn.disabled=false;btn.title=''}
+}
 function openGenerator(){
   const m=$('#genModal');if(!m)return;
   m.classList.add('open');
@@ -1931,8 +2005,14 @@ function setGenEngine(engine){
   $$('#genEngine button').forEach(b=>b.classList.toggle('on',b.dataset.engine===genEngine));
   // Hide all LLM/API/security noise when Engine=Native.
   const ai=document.getElementById('aiBox');if(ai)ai.style.display=llm?'':'none';
-  const primary=$('#genRunPrimary');
-  if(primary)primary.textContent=llm?'Ask LLM':'Generate current';
+  // The preview belongs to the main generator flow, not to connection settings;
+  // it is only relevant while the LLM engine is selected.
+  const res=$('#genLLMResult');if(res&&!llm)res.style.display='none';
+  else if(res&&llm)res.style.display='block';
+  // Action buttons are Native-only for now: in LLM mode the typed reshape is the
+  // only producer, so New idea / Variation / Fill gaps are not shown at all.
+  if(llm){aiPhase=aiProposal?'proposal':(SecretStore.get(aiActiveProfile().id)?'ready':'nokey');setAiPhase(aiPhase)}else refreshAiUI();
+  syncGenCTA();
   // Opening the dialog must never change the project — this only toggles visibility.
 }
 function runNativeGenerate(scope){
@@ -1944,23 +2024,30 @@ function runNativeGenerate(scope){
 
 /* ---------- dialog actions ---------- */
 function genAction(kind){
-  if(genEngine==='llm'){
-    if(kind==='new'||kind==='variation'){aiAsk();return}   // LLM produces a proposal, Apply applies
-    if(kind==='fill'){toast('Fill gaps is a Native action');return}
-  }
   if(kind==='new'){runGen();return}
   if(kind==='variation'){variationToNext();return}
   if(kind==='fill'){fillGaps();return}
+}
+// The one and only CTA click. Engine and scope are read here, live.
+function runPrimaryCTA(){
+  if(genEngine==='llm'){
+    if(aiProposal){aiApply();return}         // proposal ready → Apply
+    if(genScope()==='all'){toast('LLM A\u2013D not available yet');syncGenCTA();return}
+    aiAsk();return
+  }
+  if(aiProposal)aiProposal=null;             // leaving LLM state behind
+  runNativeGenerate(genScope());
 }
 function bindGeneratorDialog(){
   const m=$('#genModal');if(!m)return;
   $('#generateBtn').onclick=openGenerator;
   $('#genModalClose').onclick=closeGenerator;
+  $('#genModalCancel').onclick=closeGenerator;
   m.addEventListener('pointerdown',e=>{if(e.target===m)closeGenerator()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&m.classList.contains('open'))closeGenerator()});
   $$('#genEngine button').forEach(b=>b.onclick=()=>setGenEngine(b.dataset.engine));
-  $('#genRunPrimary').onclick=()=>{if(genEngine==='llm'){aiAsk();return}runNativeGenerate($('#genScope').value)};
-  $('#genRunAll').onclick=()=>{generateAllParts()};
+  $('#genRunPrimary').onclick=runPrimaryCTA;
+  $('#genScope').addEventListener('change',syncGenCTA);
   $('#genActionNew').onclick=()=>genAction('new');
   $('#genActionVariation').onclick=()=>genAction('variation');
   $('#genActionFill').onclick=()=>genAction('fill');
