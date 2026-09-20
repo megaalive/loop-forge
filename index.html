@@ -860,6 +860,31 @@ function chordPitches(rootPitch,shape){
   const iv=CHORD_SHAPES[shape]||CHORD_SHAPES.maj;
   return iv.map(x=>clamp(rootPitch+x,24,108))
 }
+// Root pitch for chord helper: anchored on the selected key + a scale degree, not a fixed C.
+function keyRootPitch(role,degree=0){
+  const sc=scaleNotes($('#key').value,$('#scale').value);
+  const deg=((degree%sc.length)+sc.length)%sc.length;
+  const octShift=Math.floor(degree/sc.length);
+  const basePc=sc[deg];
+  // place tonic near a comfortable register for the role
+  const anchor=role==='bass'?36:60;
+  const anchorPc=((anchor%12)+12)%12;
+  let delta=basePc-anchorPc;
+  if(delta>6)delta-=12;
+  if(delta<-6)delta+=12;
+  return clamp(anchor+delta+octShift*12,24,108)
+}
+// Root pitch derived from an existing note's scale degree (so chords follow the part's own harmony)
+function chordRootForTrack(tr,step){
+  const ns=noteEvents(tr);
+  if(ns.length){
+    // nearest note at or before this step becomes the chord root
+    const prior=ns.filter(n=>n.start<=step).sort((a,b)=>b.start-a.start)[0];
+    const any=[...ns].sort((a,b)=>Math.abs(a.start-step)-Math.abs(b.start-step))[0];
+    return (prior||any).pitch
+  }
+  return keyRootPitch(tr.role,0)
+}
 function suggestPitches(tr){
   const ns=noteEvents(tr),sc=scaleNotes($('#key').value,$('#scale').value),out=[];
   if(!ns.length){
@@ -875,11 +900,12 @@ function suggestPitches(tr){
   }
   return out
 }
-function addChordAt(tr,step,shape,rootPitch){
+function addChordAt(tr,step,shape,rootPitch=null){
   if(tr.locked){toast('Track is locked');return}
+  const root=rootPitch==null?chordRootForTrack(tr,step):rootPitch;
   checkpoint('Add chord');
-  chordPitches(rootPitch,shape).forEach(p=>addNote(tr,p,step,Math.min(4,STEPS-step),2,1,0));
-  renderAll();toast('Chord '+shape+' added')
+  chordPitches(root,shape).forEach(p=>addNote(tr,p,step,Math.min(4,STEPS-step),2,1,0));
+  renderAll();toast(noteName(root)+' '+shape+' chord added')
 }
 function snapTrackToScale(tr){
   if(tr.locked){toast('Track is locked');return}
@@ -982,10 +1008,11 @@ function renderInlinePiano(tr,i){
 function buildNoteTools(tr,i){
   const box=document.createElement('div');box.className='note-tools';
   const scaleName=escHtml($('#scale').value),keyName=escHtml($('#key').value);
+  const rootPitch=chordRootForTrack(tr,selectedStep);
   box.innerHTML='<span class="nt-label">Chord ('+keyName+' '+scaleName+')</span>'
     +'<div class="nt-row" data-chords>'+Object.keys(CHORD_SHAPES).map(s=>'<button data-chord="'+s+'" class="'+(s===chordShape?'on':'')+'">'+s+'</button>').join('')+'</div>'
-    +'<span class="nt-label">Add chord at step '+String(selectedStep+1).padStart(2,'0')+'</span>'
-    +'<div class="nt-row"><button data-act="addchord">Add '+escHtml(chordShape)+' chord</button><button data-act="snap">Snap all to scale</button></div>'
+    +'<span class="nt-label">Step '+String(selectedStep+1).padStart(2,'0')+' root '+escHtml(noteName(rootPitch))+'</span>'
+    +'<div class="nt-row"><button data-act="addchord">Add '+escHtml(noteName(rootPitch))+' '+escHtml(chordShape)+'</button><button data-act="snap">Snap all to scale</button></div>'
     +'<span class="nt-label">Next note ideas</span><div class="suggest" data-suggest></div>'
     +'<label class="autosnap"><input type="checkbox" data-autosnap '+(autoSnap?'checked':'')+'>Keep notes in scale</label>';
   const sug=box.querySelector('[data-suggest]');
@@ -995,7 +1022,7 @@ function buildNoteTools(tr,i){
     const b=e.target.closest('button');if(!b)return;
     if(b.dataset.chord){chordShape=b.dataset.chord;renderAll();return}
     if(b.dataset.pitch!=null){if(tr.locked)return toast('Track is locked');checkpoint('Add note');addNote(tr,clamp(+b.dataset.pitch,24,108),selectedStep,1,2,1,0);renderAll();return}
-    if(b.dataset.act==='addchord'){addChordAt(tr,selectedStep,chordShape,tr.role==='bass'?36:60);return}
+    if(b.dataset.act==='addchord'){addChordAt(tr,selectedStep,chordShape);return}
     if(b.dataset.act==='snap'){snapTrackToScale(tr);return}
   });
   box.querySelector('[data-autosnap]').addEventListener('change',e=>{autoSnap=e.target.checked;toast(autoSnap?'Keeping notes in scale':'Free notes')});
