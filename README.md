@@ -83,6 +83,14 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - **Lifecycle audition bersih**: pemilihan meter preview (`auditionTrack`) kini selalu dilepas saat audition selesai — termasuk **Stop sound** manual pada sample dan saat timer synth berakhir di tengah playback. Timer juga dijaga oleh index track agar timer lama tidak menghapus audition yang lebih baru. Penghentian meter RAF tetap terpisah: hanya berhenti bila tidak ada playback atau preview lain.
 - **Analyser tidak basi antar context**: `createAudioContext()` mengatur ulang `previewAnalyser`, `auditionTrack`, dan `auditionTap`, sehingga analyser dari AudioContext lama tidak pernah dipakai pada graph context baru.
 
+## Baru di 4.8.0 — bantuan menambah nada & beat
+
+- **Chord helper di inline piano roll**: tombol maj / min / 7 / maj7 / min7 / sus2 / sus4, plus **Add chord** pada step aktif. Chord mengikuti kunci & skala yang dipilih.
+- **Snap to scale**: tombol **Snap all to scale** memperbaiki nada yang di luar skala, dan opsi **Keep notes in scale** membuat klik di piano roll otomatis membulat ke nada terdekat dalam skala.
+- **Next note ideas**: saran nada berikutnya yang harmonis (berdasarkan skala dan nada terakhir), sekali klik untuk menambah.
+- **Similar ↔ Wild**: kontrol variasi baru menggantikan kekuatan `Variation → next` yang dulu tetap. Geser ke kiri untuk perubahan dekat, ke kanan untuk variasi liar.
+- **Humanize sadar peran**: kick/snare minim pergeseran, hat/perc lebih longgar, chord stabil, bass rapat — lewat tabel `HUMANIZE_BY_ROLE`.
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -99,4 +107,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.7.6**.
+Versi saat ini: **4.8.0**.
