@@ -1202,15 +1202,28 @@ async function renderOffline(onlyTrack=null){
   }finally{renderMaster=null;renderBuses=null}
 }
 function vlq(n){n=Math.max(0,Math.round(n));const b=[n&0x7f];n>>=7;while(n>0){b.unshift((n&0x7f)|0x80);n>>=7}return b}
+function isDrumTrack(tr){return ['kick','snare','hat','clap','tom'].includes(tr.type)||['kick','snare','hat','perc'].includes(tr.role)}
+function midiTextBytes(s){return Array.from(String(s)).map(c=>c.charCodeAt(0)&0x7F)}
+function midiTrackBytes(events,name){
+  const track=[];let last=0;
+  if(name!=null){const nb=midiTextBytes(name);track.push(0,0xFF,0x03,nb.length,...nb)}
+  events.forEach(e=>{track.push(...vlq(Math.max(0,e.t-last)),...e.data);last=Math.max(last,e.t)});
+  track.push(0,0xFF,0x2F,0x00);
+  const len=track.length;
+  return [0x4D,0x54,0x72,0x6B,(len>>>24)&255,(len>>>16)&255,(len>>>8)&255,len&255,...track]
+}
 function buildMidiBlob(){
   const chain=parseChain(),ppq=96,stepTicks=ppq/4,bpmVal=Math.max(20,+$('#bpm').value||112);
   const secPerStep=60/bpmVal/4,ticksPerMs=stepTicks/(secPerStep*1000),sw=(+$('#swing').value||0)/100;
-  const ev=[],micros=Math.round(60000000/bpmVal);
-  ev.push({t:0,data:[0xFF,0x51,0x03,(micros>>16)&0xFF,(micros>>8)&0xFF,micros&0xFF]});
+  const micros=Math.round(60000000/bpmVal);
+  const mel=[0,1,2,3,4,5,6,7,8,10,11,12,13,14,15];
+  const chan=[];let mi=0;
+  tracks().forEach((tr,i)=>{chan[i]=isDrumTrack(tr)?9:mel[mi++%mel.length]});
+  const per=Array.from({length:TRACKS},()=>[]);
   chain.forEach((p,bar)=>{
     const ts=state.patterns[p];
     ts.forEach((tr,i)=>{
-      const ch=i%16;
+      const ch=chan[i],ev=per[i];
       if(isPitchedTrack(tr)){
         noteEvents(tr).forEach(n=>{
           const k=n.start,baseTick=(bar*16+k)*stepTicks;
@@ -1233,12 +1246,10 @@ function buildMidiBlob(){
       });
     });
   });
-  ev.sort((a,b)=>a.t-b.t||(a.data[0]&0xF0)-(b.data[0]&0xF0));
-  const track=[];let last=0;
-  ev.forEach(e=>{track.push(...vlq(Math.max(0,e.t-last)),...e.data);last=Math.max(last,e.t)});
-  track.push(0,0xFF,0x2F,0x00);
-  const tlen=track.length;
-  const bytes=[0x4D,0x54,0x68,0x64,0,0,0,6,0,0,0,1,0,96,0x4D,0x54,0x72,0x6B,(tlen>>>24)&255,(tlen>>>16)&255,(tlen>>>8)&255,tlen&255,...track];
+  const ntrks=1+TRACKS;
+  let bytes=[0x4D,0x54,0x68,0x64,0,0,0,6,0,1,(ntrks>>8)&255,ntrks&255,0,96];
+  bytes=bytes.concat(midiTrackBytes([{t:0,data:[0xFF,0x51,0x03,(micros>>16)&0xFF,(micros>>8)&0xFF,micros&0xFF]}],'LOOPFORGE-16 v'+APP_VERSION));
+  per.forEach((evs,i)=>{evs.sort((a,b)=>a.t-b.t||(a.data[0]&0xF0)-(b.data[0]&0xF0));bytes=bytes.concat(midiTrackBytes(evs,tracks()[i].name))});
   return new Blob([new Uint8Array(bytes)],{type:'audio/midi'})
 }
 function exportMidi(){download(`loopforge16-v${APP_VERSION}.mid`,buildMidiBlob());toast('MIDI exported')}
