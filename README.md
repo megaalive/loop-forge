@@ -103,6 +103,14 @@ Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia 
 - **Lock selalu menang**; `preserve` dihormati.
 - **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
 
+### Perbaikan 4.9.5 (transport BPM live)
+
+- **Scheduler tidak lagi membaca BPM mentah dari DOM.** Ditambah `transportBpm` terpisah; `secondsPerStep()` memakai nilai itu. Input angka hanya boleh meng-*commit* nilai lengkap dalam rentang **40..240**.
+- **Nilai parsial saat mengetik diabaikan, bukan di-clamp.** Mengetik `112 → "" → "8" → "80"` tidak pernah membuat tempo menjadi `8`; transport tetap 112 sampai `80` valid. Jadi tidak ada lagi step 1,8 detik yang membuat `nextNoteTime` melompat jauh (penyebab freeze saat menurunkan BPM).
+- **Satu snapshot `stepSec` per step**, dipakai untuk increment `nextNoteTime`, swing, dan durasi note bernada — perubahan BPM di tengah tick tidak bisa membelah satu step.
+- **Transport tidak di-reset saat BPM berubah**; phase dijaga, `nextNoteTime − ctx.currentTime` tetap dalam bound wajar (lookahead 200 ms dipertahankan).
+- **Checkpoint per gestur**: satu gestur edit (fokus + beberapa ArrowUp, atau satu drag) = satu transaksi undo, bukan satu per keypress.
+
 ### Perbaikan 4.9.4 (determinisme per-track)
 
 - **Dua track ber-role sama tidak lagi menghasilkan kandidat identik.** Dulu `genRoleTrack` dipanggil dengan `seeded(candSeed)` yang sama untuk setiap target, jadi bass 7 dan bass 8 (atau chord 9 dan chord 10) bisa dapat note/progresi identik dan saling menumpuk. Sekarang tiap track memakai child seed `candSeed ^ hash32('track|'+i+'|'+role)`: tetap reproducible untuk decision/project yang sama, tapi tidak identik antar-track.
@@ -149,4 +157,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.9.4**.
+Versi saat ini: **4.9.5**.

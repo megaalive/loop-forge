@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.9.4 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.9.5 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.9.4 — per-track seed ===== */
+/* ===== LOOPFORGE-16 v4.9.5 — live BPM transport ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -547,7 +547,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.9.4', STEPS=16, TRACKS=16;
+const APP_VERSION='4.9.5', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -940,19 +940,48 @@ function snapTrackToScale(tr){
 let autoSnap=false;
 let chordShape='maj';
 function resolvedNote(tr,i,s,step){if(s.n!=null)return s.n;if(tr.type==='synth'&&i>=8){const sc=scaleNotes($('#key').value,$('#scale').value);return 48+sc[(step+i)%sc.length]+(i>11?12:0)}return tr.note}
-function secondsPerStep(){return 60/(+$('#bpm').value||112)/4}
+// BPM the audio scheduler actually uses. The DOM field is only a text input;
+// partial typing like "8" or "18" must never reach the transport.
+const BPM_MIN=40,BPM_MAX=240,BPM_DEFAULT=112;
+let transportBpm=BPM_DEFAULT;
+function validBpm(v){const n=+v;return Number.isFinite(n)&&n>=BPM_MIN&&n<=BPM_MAX}
+// Commit only a complete, in-range value from the input. Returns true if committed.
+function commitBpm(raw){
+  if(!validBpm(raw))return false;
+  transportBpm=Math.round(+raw);
+  return true
+}
+function secondsPerStep(){return 60/transportBpm/4}
 function scheduleVisualAt(audioTime,fn){
   if(!ctx)return;
   const id=setTimeout(()=>{visualTimers.delete(id);if(isPlaying)fn()},Math.max(0,(audioTime-ctx.currentTime)*1000));
   visualTimers.add(id)
 }
 function clearVisualTimers(){visualTimers.forEach(id=>clearTimeout(id));visualTimers.clear()}
-function scheduleStep(step,time,pattern=playbackPattern){
-  const sw=(+$('#swing').value||0)/100,base=time+((step%2)?secondsPerStep()*sw*.52:0),ts=state.patterns[pattern]||tracks();if(metro&&step%4===0)metroClick(ctx,base,step===0);
-  ts.forEach((tr,i)=>{if(isPitchedTrack(tr)){notesAtStart(tr,step).forEach(n=>{if(Math.random()>n.p)return;const t=Math.max(ctx.currentTime+.001,base+(n.shift||0)/1000);hit(ctx,tr,t,noteVelocity(n.velocity),n.pitch,null,0,i,ts,false,n.length*secondsPerStep())});return}const st=tr.steps[step];if(!st.v||Math.random()>st.p)return;const t=Math.max(ctx.currentTime+.001,base+(st.shift||0)/1000);hit(ctx,tr,t,[0,.45,.72,1][st.v],resolvedNote(tr,i,st,step),null,st.slice||0,i,ts);if(sidechain&&tr.type==='kick'&&!tr.mute&&(!ts.some(x=>x.solo)||tr.solo))duckBass(t,ts)});
+// One stepSec snapshot is threaded through swing, note durations and the
+// nextNoteTime increment so a mid-tick BPM change can never split a step.
+function scheduleStep(step,time,stepSec,pattern=playbackPattern){
+  const sw=(+$('#swing').value||0)/100,base=time+((step%2)?stepSec*sw*.52:0),ts=state.patterns[pattern]||tracks();if(metro&&step%4===0)metroClick(ctx,base,step===0);
+  ts.forEach((tr,i)=>{if(isPitchedTrack(tr)){notesAtStart(tr,step).forEach(n=>{if(Math.random()>n.p)return;const t=Math.max(ctx.currentTime+.001,base+(n.shift||0)/1000);hit(ctx,tr,t,noteVelocity(n.velocity),n.pitch,null,0,i,ts,false,n.length*stepSec)});return}const st=tr.steps[step];if(!st.v||Math.random()>st.p)return;const t=Math.max(ctx.currentTime+.001,base+(st.shift||0)/1000);hit(ctx,tr,t,[0,.45,.72,1][st.v],resolvedNote(tr,i,st,step),null,st.slice||0,i,ts);if(sidechain&&tr.type==='kick'&&!tr.mute&&(!ts.some(x=>x.solo)||tr.solo))duckBass(t,ts)});
   scheduleVisualAt(base,()=>{if(currentPattern===pattern)paintPlayhead(step)});
 }
-function schedulerTick(){while(nextNoteTime<ctx.currentTime+.20){const pattern=playbackPattern;scheduleStep(currentStep,nextNoteTime,pattern);nextNoteTime+=secondsPerStep();currentStep++;if(currentStep>=STEPS){currentStep=0;if(songMode){const c=parseChain();chainPos=(chainPos+1)%c.length;const nextPattern=c[chainPos];playbackPattern=nextPattern;const boundary=nextNoteTime;scheduleVisualAt(boundary,()=>switchPattern(nextPattern,true))}}}}
+function schedulerTick(){
+  while(nextNoteTime<ctx.currentTime+.20){
+    const pattern=playbackPattern;
+    const stepSec=secondsPerStep();              // snapshot once per step
+    scheduleStep(currentStep,nextNoteTime,stepSec,pattern);
+    nextNoteTime+=stepSec;
+    currentStep++;
+    if(currentStep>=STEPS){
+      currentStep=0;
+      if(songMode){
+        const c=parseChain();chainPos=(chainPos+1)%c.length;
+        const nextPattern=c[chainPos];playbackPattern=nextPattern;
+        const boundary=nextNoteTime;scheduleVisualAt(boundary,()=>switchPattern(nextPattern,true))
+      }
+    }
+  }
+}
 function updatePlaybackButtons(){
   const playBtn=$('#playBtn');
   if(playBtn){
@@ -1657,8 +1686,8 @@ function parseChain(){const a=$('#chain').value.toUpperCase().match(/[ABCD]/g);r
 function switchPattern(p,rerender=true){if(!state.patterns[p])return;closeStepPop();currentPattern=p;if(isPlaying&&!songMode)playbackPattern=p;document.querySelectorAll('.patternbtn').forEach(b=>b.classList.toggle('active',b.dataset.pattern===p));syncTrackBuses();updateTransportPosition();if(rerender)renderAll()}
 async function loadSample(file){stopSoundPreview();const trackIndex=selectedTrack;if(!await ensureAudio())return toast('Audio is blocked');const ab=await file.arrayBuffer(),decoded=await ctx.decodeAudioData(ab.slice(0));sampleBuffers[trackIndex]=decoded;checkpoint('Load sample');const tr=tracks()[trackIndex];tr.noteEvents=[];tr.type='sample';tr.sliceMode=false;expandedTracks.delete(trackIndex);selectedTrack=trackIndex;$('#soundType').value='sample';$('#sampleMode').value='full';renderAll();toast(`Sample loaded: ${file.name}`)}
 
-function projectData(){return {version:5,bpm:+$('#bpm').value,swing:+$('#swing').value,echo:+$('#echo').value||0,duck:sidechain?1:0,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
-function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=cloneData(p.state.patterns);migrateState();$('#bpm').value=p.bpm||112;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#echo').value=p.echo??0;$('#echoVal').textContent=$('#echo').value+'%';setEcho((+$('#echo').value||0)/100);sidechain=!!p.duck;$('#scBtn').classList.toggle('primary',sidechain);$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
+function projectData(){return {version:5,bpm:transportBpm,swing:+$('#swing').value,echo:+$('#echo').value||0,duck:sidechain?1:0,chain:$('#chain').value,key:$('#key').value,scale:$('#scale').value,currentPattern,state:cloneData(state)}}
+function applyProject(p,announce=false){if(!p?.state?.patterns)throw new Error('Invalid project');state.patterns=cloneData(p.state.patterns);migrateState();transportBpm=validBpm(p.bpm)?Math.round(+p.bpm):BPM_DEFAULT;$('#bpm').value=transportBpm;$('#swing').value=p.swing||0;$('#swingVal').textContent=$('#swing').value+'%';$('#echo').value=p.echo??0;$('#echoVal').textContent=$('#echo').value+'%';setEcho((+$('#echo').value||0)/100);sidechain=!!p.duck;$('#scBtn').classList.toggle('primary',sidechain);$('#chain').value=p.chain||'A B C D';if(p.key)$('#key').value=p.key;if(p.scale)$('#scale').value=p.scale;currentPattern=p.currentPattern&&state.patterns[p.currentPattern]?p.currentPattern:'A';switchPattern(currentPattern,false);renderAll();if(announce)toast('Project loaded')}
 async function shareUrl(){const enc=await encodeProject();const base=(location.origin&&location.origin!=='null')?location.origin+location.pathname:location.href.split('#')[0];return{enc,url:base+'#p='+enc}}
 async function shareLink(){
   try{
@@ -1801,7 +1830,7 @@ const typingMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:7
 
 async function init(){
   setMode(localStorage.getItem(LS_MODE)!=='advanced');
-  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
+  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';commitBpm($('#bpm').value);migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
   if(!navigator.requestMIDIAccess){$('#midiBtn').disabled=true;$('#midiBtn').textContent='MIDI n/a';$('#midiBtn').title='Web MIDI is not supported by this browser'}
   document.addEventListener('pointerdown',primeAudio,{once:true,passive:true});
   document.addEventListener('touchend',primeAudio,{once:true,passive:true});
@@ -1815,7 +1844,24 @@ async function init(){
   $('#metroBtn').onclick=()=>{metro=!metro;$('#metroBtn').classList.toggle('primary',metro)};
   $('#typingBtn').onclick=()=>{typingMode=!typingMode;$('#typingBtn').classList.toggle('primary',typingMode);toast(typingMode?'Keyboard notes on':'Keyboard notes off')};
   $('#audioBtn').onclick=async()=>{const ok=await ensureAudio();if(ok){audioProbe();toast('Audio enabled')}else toast('Audio is still blocked')};$('#midiBtn').onclick=enableMidi;$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
-  const checkpointTempo=e=>{if(e.type==='pointerdown'||['ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key))checkpoint()};$('#bpm').addEventListener('pointerdown',checkpointTempo);$('#bpm').addEventListener('keydown',checkpointTempo);$('#bpm').addEventListener('input',markDirty);$('#swing').addEventListener('pointerdown',checkpointTempo);$('#swing').addEventListener('keydown',checkpointTempo);$('#swing').oninput=e=>{$('#swingVal').textContent=e.target.value+'%';markDirty()};$('#echo').oninput=e=>{$('#echoVal').textContent=e.target.value+'%';setEcho(e.target.value/100);markDirty()};$('#scBtn').onclick=()=>{sidechain=!sidechain;$('#scBtn').classList.toggle('primary',sidechain);markDirty();toast(sidechain?'Sidechain on: kick ducks the bass':'Sidechain off')};$('#chain').addEventListener('input',markDirty);$('#key').addEventListener('change',markDirty);$('#scale').addEventListener('change',markDirty);$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#generateAll').onclick=generateAllParts;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#variAmount').oninput=e=>{$('#variVal').textContent=e.target.value+'%';markDirty()};$('#variVal').textContent=$('#variAmount').value+'%';$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;$('#promptChips').onclick=e=>{const b=e.target.closest('button');if(!b)return;e.preventDefault();const ta=$('#genPrompt');ta.value=(ta.value.trim()?ta.value.trim()+' ':'')+b.dataset.w;ta.focus()};
+  // One undo transaction per edit gesture. The snapshot is taken once at the
+  // start of the gesture (focus/pointerdown); repeated ArrowUp/Down never adds more.
+  let tempoGestureOpen=false;
+  const beginTempoGesture=()=>{if(tempoGestureOpen)return;tempoGestureOpen=true;checkpoint('Tempo')};
+  const endTempoGesture=()=>{tempoGestureOpen=false};
+  const bpmEl=$('#bpm');
+  bpmEl.addEventListener('pointerdown',beginTempoGesture);
+  bpmEl.addEventListener('focus',beginTempoGesture);
+  bpmEl.addEventListener('blur',endTempoGesture);
+  bpmEl.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(e.key))beginTempoGesture()});
+  bpmEl.addEventListener('change',()=>{endTempoGesture();commitBpm(bpmEl.value)});
+  bpmEl.addEventListener('input',()=>{commitBpm(bpmEl.value);markDirty()});
+  const swingEl=$('#swing');
+  swingEl.addEventListener('pointerdown',()=>checkpoint('Swing'));
+  swingEl.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(e.key)&&!swingEl._g){swingEl._g=true;checkpoint('Swing')}});
+  swingEl.addEventListener('keyup',()=>{swingEl._g=false});
+  swingEl.addEventListener('blur',()=>{swingEl._g=false});
+  swingEl.oninput=e=>{$('#swingVal').textContent=e.target.value+'%';markDirty()};$('#echo').oninput=e=>{$('#echoVal').textContent=e.target.value+'%';setEcho(e.target.value/100);markDirty()};$('#scBtn').onclick=()=>{sidechain=!sidechain;$('#scBtn').classList.toggle('primary',sidechain);markDirty();toast(sidechain?'Sidechain on: kick ducks the bass':'Sidechain off')};$('#chain').addEventListener('input',markDirty);$('#key').addEventListener('change',markDirty);$('#scale').addEventListener('change',markDirty);$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#generateAll').onclick=generateAllParts;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#variAmount').oninput=e=>{$('#variVal').textContent=e.target.value+'%';markDirty()};$('#variVal').textContent=$('#variAmount').value+'%';$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;$('#promptChips').onclick=e=>{const b=e.target.closest('button');if(!b)return;e.preventDefault();const ta=$('#genPrompt');ta.value=(ta.value.trim()?ta.value.trim()+' ':'')+b.dataset.w;ta.focus()};
   $('#previewSound').onclick=async()=>{
     if(previewSource){stopSoundPreview();return}
     if(!await ensureAudio())return toast('Audio is blocked. Tap again.');
