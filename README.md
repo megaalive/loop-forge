@@ -34,6 +34,27 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 ## Riwayat perubahan (terbaru dulu)
 
+### Perbaikan 4.11.1 (UX sanity generator)
+
+Pass ini **bukan penambahan kemampuan musik**. Prinsipnya: kontrol yang terlihat harus benar-benar berpengaruh, dan kontrol yang tampak seperti pilihan tidak boleh diam-diam mengubah project.
+
+- **Sidebar tidak lagi kosong saat pertama dibuka.** Dulu tab `Sound` tampak aktif tetapi panel `#sound` masih `display:none`, jadi editor kanan kosong sampai tab diklik. Sekarang satu fungsi `selectTab()` menggerakkan panel yang tampil dan tab yang aktif bersamaan, dipanggil saat init (dan sesudah restore project/share), jadi keduanya tidak bisa lagi berbeda.
+- **Prompt tidak lagi terlihat wajib di Native.** Native bisa generate tanpa mengetik apa pun (mode `New idea` default). Kemampuan teks lokal tetap ada, tapi dipindah ke **More → Local text idea** — bukan lagi kontrol pertama. Alur default kini terasa **pilih → Generate**.
+- **`New idea` / `Variation` jadi mode selection, bukan tombol mutation.** Dulu keduanya terlihat seperti radio tapi klik langsung meng-checkpoint/mutate/mengganti part. Sekarang klik mode hanya **memilih**; mutasi hanya terjadi saat CTA footer ditekan. Mode memakai segmented control dengan selected state dan `aria-pressed`.
+- **`Fill gaps` bukan mode generation.** Dipindah ke **More & tools** karena implementasinya memang tool untuk selected track (Euclid/Humanize/Fill gaps sekelompok).
+- **Variation jujur terhadap `variationToNext()`.** UI menampilkan **From A → B** dan `Similar ↔ Wild` (satu-satunya kontrol yang dibaca handler); Scope dan Change **disembunyikan** di mode Variation karena handler tidak membacanya. CTA menjadi **Create variation → B**.
+- **`Change` (target) tidak muncul di New idea.** `generateIdea()` tidak membaca `genTarget`, sehingga kontrol itu tidak lagi dipajang di alur default — capability teks lokal + target tetap ada di More, jujur sebagai "local text idea".
+- **Label arah density dibetulkan**: `Busy ↔ simple` → **`Simple ↔ Busy`** (kanan = lebih ramai).
+- **UI LLM berbeda dari Native.** Saat Engine=LLM, kontrol yang tidak masuk `aiBuildPayload()` (Style, Density, Similar↔Wild, Change, Seed, rhythm tools) **disembunyikan**. LLM hanya menampilkan: Describe the change, Part, konteks Key/Scale, connection ringkas, dan proposal.
+- **Prompt WAJIB untuk LLM, dan jujur.** Saat prompt kosong, CTA **disabled** dan helper inline **"Describe what you want to change."** muncul di dekat field (bukan toast global). Provider tidak dipanggil bila prompt kosong.
+- **CTA punya state yang terlihat**: `Ask LLM` → `Asking…` (disabled) → `Apply proposal` → kembali usable saat error. Duplikat klik saat `asking` tidak mengirim request kedua (guard request-id/abort existing tetap utuh).
+- **Connection tidak lagi mendominasi.** Setelah profile/key ada, main flow hanya menampilkan **summary ringkas** (`nama · model · state`) + tombol **Configure**. Config (profile/endpoint/model/key/remember/Test/Forget/warning) tetap ada di collapsible yang **auto-open bila belum ada key**, default collapsed bila sudah configured. Status dibedakan jujur: `No key` / `Key set` / `Testing connection…` / `Connection OK` — **key ada tidak pernah diklaim sudah tested**. Security semantics tidak berubah.
+- **Proposal user-facing.** Kartu **Proposal** human-readable (Change / Style / Density / Syncopation / Humanize / Variation / Keep) dengan catatan **"Nothing has changed yet."**. Request/JSON mentah pindah ke **Technical details** (collapsed). Schema AI tidak diubah.
+- **Feedback dekat CTA.** Baris status di footer menampilkan waiting/error/proposal/applied sehingga user tidak perlu scroll ke blok connection.
+- **Toast di atas modal.** `.toast z-index` dinaikkan dari 99 menjadi 200 (> `130` modal) agar notifikasi global tidak tersembunyi di belakang modal; validasi form utama tetap **inline**.
+- **Responsif** 375/768/1280: tidak ada horizontal overflow, CTA footer terjangkau, segmented mode tidak terpotong, modal scroll wajar.
+- Invariant tetap: Native default & full offline; LLM hanya menghasilkan typed decision; semua mutasi tetap ditulis LocalExecutor/code; transport BPM, audio, WAV/MIDI, dan schema project/share/export tidak berubah. `APP_VERSION` tidak di-bump pada pass UX ini.
+
 ### Baru di 4.11.0 (Generator dialog)
 
 - **Satu entry point**: tombol **Generate** di topbar (menggantikan "New part"). Tombol **Blank loop** tetap.

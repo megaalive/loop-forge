@@ -281,7 +281,10 @@ details.morebox>.inside{padding:0 9px 9px}
 .footer{border-top:1px solid var(--border);padding:7px 14px;color:var(--text-dim);display:flex;gap:12px;flex-wrap:wrap;font-size:11px}
 .footer .easy-help{color:var(--text-dim)}
 kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text);background:var(--surface-3);font:10px var(--mono)}
-.toast{position:fixed;right:14px;bottom:14px;z-index:99;background:var(--surface-3);border:1px solid var(--border-strong);border-radius:var(--radius);padding:9px 12px;max-width:320px;box-shadow:var(--shadow);display:none;font-size:12px;font-weight:600}
+/* Toast must sit ABOVE the generator dialog (z-index 130) so a global safety-net
+   message can never be hidden behind the modal. Inline form feedback is still the
+   primary channel for the generator itself. */
+.toast{position:fixed;right:14px;bottom:14px;z-index:200;background:var(--surface-3);border:1px solid var(--border-strong);border-radius:var(--radius);padding:9px 12px;max-width:320px;box-shadow:var(--shadow);display:none;font-size:12px;font-weight:600}
 
 /* ---------- generator dialog ---------- */
 .genmodal{position:fixed;inset:0;z-index:130;display:none;background:rgba(4,5,7,.66);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
@@ -302,9 +305,43 @@ kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;pad
 .gen-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .gen-actions.three{grid-template-columns:repeat(3,1fr)}
 .gen-hint{font-size:10.5px;color:var(--text-dim);margin-top:6px;line-height:1.5}
-/* Prompt field reuses the existing LOOPFORGE form language: it is inside
-   label.control, so the shared input/select/textarea rule already themes it.
-   Only the textarea-specific sizing lives here — no new colour tokens. */
+/* Native mode selector — a real segmented control with a selected state.
+   Clicking a mode only SELECTS it; it never runs a mutation. */
+.gen-modes{display:flex;gap:6px;margin-bottom:10px}
+.gen-mode{flex:1;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);border-radius:var(--radius);padding:8px 10px;font-weight:700;text-align:left;min-height:34px}
+.gen-mode:hover{border-color:var(--border-strong);color:var(--text)}
+.gen-mode.on{border-color:var(--accent);background:var(--accent-soft);color:var(--text)}
+.gen-mode .gm-sub{display:block;font-size:10px;font-weight:600;color:var(--text-faint);margin-top:1px}
+.gen-mode.on .gm-sub{color:var(--text-dim)}
+/* Inline field feedback (empty prompt etc.) — lives next to its control, never toast-only. */
+.gen-inline{display:none;font-size:10.5px;line-height:1.5;margin-top:5px;color:var(--warn)}
+.gen-inline.show{display:block}
+.gen-inline.err{color:var(--danger)}
+#genPrompt.invalid{border-color:var(--danger)}
+/* LLM connection compact summary — replaces the always-open config form. */
+.gen-conn{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between;border:1px solid var(--border);background:var(--surface-2);border-radius:var(--radius);padding:7px 9px}
+.gen-conn-main{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.gen-conn-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.gen-conn-name{font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.gen-conn-model{color:var(--text-dim);font-size:10.5px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.gen-conn-state{font-size:10px;border:1px solid var(--border);border-radius:999px;padding:1px 7px;color:var(--text-dim);flex-shrink:0}
+.gen-conn-state.ok{color:var(--accent);border-color:var(--accent-dim)}
+.gen-conn-state.warn{color:var(--warn);border-color:#7a6530}
+.gen-conn-state.err{color:var(--danger);border-color:#7a3f40}
+/* Human-readable proposal card. */
+.gen-proposal{display:none;border:1px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius);padding:10px}
+.gen-proposal.show{display:block}
+.gen-proposal .gp-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);margin-bottom:7px}
+.gp-row{display:flex;justify-content:space-between;gap:10px;margin:3px 0;font-size:12px}
+.gp-row span{color:var(--text-dim)}
+.gp-row b{color:var(--text)}
+.gp-note{margin-top:8px;font-size:10.5px;color:var(--warn)}
+/* Footer status line: keeps asking/error/applied visible right next to the CTA. */
+.gen-foot-status{flex-basis:100%;font-size:11px;color:var(--text-dim);display:none}
+.gen-foot-status.show{display:block}
+.gen-foot-status.err{color:var(--danger)}
+.gen-foot-status.ok{color:var(--accent)}
+.gen-foot-status.busy{color:var(--accent-2)}
 #genPrompt{width:100%;resize:vertical;min-height:64px;font-weight:600;line-height:1.5}
 #genPrompt::placeholder{color:var(--text-faint)}
 /* Themed scrollbars for the dialog body and the LLM preview panes.
@@ -316,11 +353,22 @@ kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;pad
 .genmodal-body::-webkit-scrollbar-thumb:hover,.aipre::-webkit-scrollbar-thumb:hover{background:var(--text-faint)}
 .genmodal-body::-webkit-scrollbar-corner,.aipre::-webkit-scrollbar-corner{background:var(--surface-2)}
 #genRunPrimary:disabled{cursor:not-allowed;opacity:.55}
+/* The footer must never cover the last body element: the card is a flex column
+   with a scrolling body, so the footer stays pinned and the body scrolls under
+   it. A small bottom padding gives the last control breathing room. */
+.genmodal-body{padding-bottom:16px}
+.gen-conn-main{min-width:0}
+@media (max-width:768px){
+  .gen-conn{flex-direction:column;align-items:stretch}
+  .gen-conn .btn{align-self:flex-start}
+}
 @media (max-width:520px){
   .genmodal.open{padding:0}
   .genmodal-card{max-height:100dvh;border-radius:0;width:100%}
   .gen-hint{font-size:11px}
   .gen-actions,.gen-actions.three{grid-template-columns:1fr 1fr}
+  .gen-modes{flex-direction:column}
+  .genmodal-foot{position:sticky;bottom:0}
 }
 
 /* ---------- step popover ---------- */
@@ -442,7 +490,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
         <button class="btn tab" data-show="project">Save</button>
       </div>
 
-      <section class="panel sidepanel" id="sound" style="display:none">
+      <section class="panel sidepanel" id="sound">
         <h3>SOUND — <span id="selectedName">Track</span></h3><div class="body">
           <label class="control" style="margin-bottom:8px">Name<input id="trackName" maxlength="24"></label>
           <div class="row advanced-only">
@@ -532,72 +580,130 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
           <button data-engine="llm">LLM</button>
         </div>
 
-        <div class="gen-sec">
-          <div class="gen-h">What do you want?</div>
-          <label class="control">Prompt<textarea id="genPrompt" rows="3" placeholder="dark sparse bass; keep the drums"></textarea></label>
-          <div class="chips" id="promptChips">
-            <button data-w="dark">dark</button><button data-w="driving">driving</button>
-            <button data-w="sparse">sparse</button><button data-w="busy">busy</button>
-            <button data-w="soft">soft</button><button data-w="hard">hard</button>
-            <button data-w="syncopated">syncopated</button><button data-w="jaipong">jaipong</button>
-            <button data-w="keep drums">keep drums</button><button data-w="keep bass">keep bass</button>
-          </div>
-          <div class="gen-hint">Native reads this text locally. LLM (Current part) sends it as a typed parameter request; the local generator still writes every note.</div>
-        </div>
-
-        <div class="gen-sec">
-          <div class="gen-h">Target / scope</div>
-          <div class="row">
+        <!-- Shared scope: read by BOTH engines (Native current/A–D, LLM gate for A–D). -->
+        <div class="gen-sec" id="genScopeSec">
+          <div class="row one">
             <label class="control">Part<select id="genScope">
               <option value="current">Current part</option>
               <option value="all">A–D (whole song)</option>
             </select></label>
-            <label class="control">Change<select id="genTarget">
-              <option value="selected">Selected track</option>
-              <option value="drums">Drums</option>
-              <option value="bass">Bass</option>
-              <option value="harmony">Harmony</option>
-              <option value="melody">Melody / arp</option>
-              <option value="texture">Texture / FX</option>
-              <option value="full">All unlocked tracks</option>
-            </select></label>
           </div>
-          <label class="control">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label>
+          <div class="gen-inline" id="genScopeHelp">LLM whole-song generation is not available yet — switch to Native for A–D.</div>
         </div>
 
-        <div class="gen-sec">
-          <div class="gen-h">Feel</div>
-          <div class="row">
-            <label class="control">Style<select id="genre"><option>Techno</option><option>House</option><option>Dark Ambient</option><option>Breakbeat</option><option>Trap</option><option>Funk</option><option>Jaipongan-ish</option><option>Minimal</option></select></label>
-            <label class="control">Busy ↔ simple<input id="density" type="range" min="10" max="90" value="50"></label>
+        <!-- ============ NATIVE ============ -->
+        <div id="genNativeUI">
+          <div class="gen-sec">
+            <div class="gen-h">Mode</div>
+            <div class="gen-modes" id="genMode" role="group" aria-label="Generation mode">
+              <button type="button" class="gen-mode on" data-mode="new" aria-pressed="true">New idea<span class="gm-sub">write a fresh part</span></button>
+              <button type="button" class="gen-mode" data-mode="variation" aria-pressed="false">Variation<span class="gm-sub">vary into the next part</span></button>
+            </div>
+            <div class="gen-hint" id="genModeHint"></div>
           </div>
-          <div class="row">
-            <label class="control">Key<select id="key"></select></label>
-            <label class="control">Mood<select id="scale"><option>Minor</option><option>Major</option><option>Dorian</option><option>Phrygian</option><option>Pentatonic</option></select></label>
+
+          <!-- New idea -->
+          <div class="gen-sec" id="genNewUI">
+            <div class="gen-h">Feel</div>
+            <div class="row">
+              <label class="control">Style<select id="genre"><option>Techno</option><option>House</option><option>Dark Ambient</option><option>Breakbeat</option><option>Trap</option><option>Funk</option><option>Jaipongan-ish</option><option>Minimal</option></select></label>
+              <label class="control">Simple ↔ Busy<input id="density" type="range" min="10" max="90" value="50"></label>
+            </div>
+            <div class="row">
+              <label class="control">Key<select id="key"></select></label>
+              <label class="control">Scale<select id="scale"><option>Minor</option><option>Major</option><option>Dorian</option><option>Phrygian</option><option>Pentatonic</option></select></label>
+            </div>
+            <div class="gen-hint">Pick a style, press Generate. No prompt needed — the local engine writes it offline.</div>
           </div>
-          <label class="control">Similar ↔ Wild <span id="variVal">40%</span><input id="variAmount" type="range" min="0" max="100" value="40"></label>
+
+          <!-- Variation -->
+          <div class="gen-sec" id="genVarUI" style="display:none">
+            <div class="gen-h">Variation</div>
+            <div class="kv"><span>From</span><b id="genVarFrom">A</b></div>
+            <div class="kv"><span>Into</span><b id="genVarTo">B</b></div>
+            <label class="control" style="margin-top:8px">Similar ↔ Wild <span id="variVal">40%</span><input id="variAmount" type="range" min="0" max="100" value="40"></label>
+            <div class="gen-hint">Creates a variation of the current part as the next part (A→B→C→D→A) and switches to it. Locked tracks are preserved.</div>
+          </div>
         </div>
 
-        <div class="gen-sec" id="genActionSec">
-          <div class="gen-h">Action</div>
-          <div class="gen-actions three">
-            <button id="genActionNew" class="btn">New idea</button>
-            <button id="genActionVariation" class="btn">Variation</button>
-            <button id="genActionFill" class="btn">Fill gaps</button>
+        <!-- ============ LLM ============ -->
+        <div id="genLLMUI" style="display:none">
+          <div class="gen-sec">
+            <div class="gen-h">Describe the change</div>
+            <label class="control"><textarea id="genPrompt" rows="3" placeholder="dark sparse bass, keep the drums"></textarea></label>
+            <div class="chips" id="promptChips">
+              <button data-w="dark">dark</button><button data-w="driving">driving</button>
+              <button data-w="sparse">sparse</button><button data-w="busy">busy</button>
+              <button data-w="soft">soft</button><button data-w="hard">hard</button>
+              <button data-w="syncopated">syncopated</button><button data-w="jaipong">jaipong</button>
+              <button data-w="keep drums">keep drums</button><button data-w="keep bass">keep bass</button>
+            </div>
+            <div class="gen-inline" id="genPromptHelp">Describe what you want to change.</div>
+            <div class="gen-hint">The model only chooses typed parameters; the local generator still writes every note.</div>
           </div>
-          <div class="gen-hint">New idea replaces the target. Variation keeps it close. Fill gaps adds ghost notes.</div>
+
+          <div class="gen-sec">
+            <div class="gen-h">Musical context</div>
+            <div class="row one">
+              <div class="kv"><span>Key · Scale (sent to model)</span><b id="genContextKey">C · Dorian</b></div>
+            </div>
+            <div class="gen-hint">The model cannot rewrite other parts.</div>
+          </div>
+
+          <div class="gen-sec">
+            <div class="gen-h">Connection</div>
+            <div class="gen-conn">
+              <div class="gen-conn-main">
+                <div class="gen-conn-line"><span class="gen-conn-name" id="genConnName">OpenAI</span><span class="gen-conn-state" id="genConnState">No key</span></div>
+                <div class="gen-conn-model" id="genConnModel">https://api.openai.com/v1/chat/completions · gpt-4o-mini</div>
+              </div>
+              <button type="button" class="btn" id="genConnConfigure">Configure</button>
+            </div>
+          </div>
+
+          <div class="gen-sec">
+            <div class="gen-proposal" id="genProposalCard">
+              <div class="gp-title">Proposal</div>
+              <div id="genProposalRows"></div>
+              <div class="gp-note">Nothing has changed yet.</div>
+            </div>
+          </div>
         </div>
 
-        <details class="morebox" id="genMore"><summary>More controls (rhythm)</summary><div class="inside">
+        <!-- ============ SHARED footer-side result ============ -->
+        <div id="genResult" class="genresult">Changes stay editable. Locked tracks stay untouched.</div>
+
+        <!-- ============ MORE / TOOLS (shared, collapsed) ============ -->
+        <details class="morebox" id="genMore"><summary>More &amp; tools</summary><div class="inside">
+          <div id="genMoreNative">
+            <div class="gen-h">Local text idea (Native)</div>
+            <label class="control">Prompt<textarea id="genPromptLocal" rows="2" placeholder="dark sparse bass; keep the drums"></textarea></label>
+            <div class="row" style="margin-top:6px">
+              <label class="control">Change<select id="genTarget">
+                <option value="selected">Selected track</option>
+                <option value="drums">Drums</option>
+                <option value="bass">Bass</option>
+                <option value="harmony">Harmony</option>
+                <option value="melody">Melody / arp</option>
+                <option value="texture">Texture / FX</option>
+                <option value="full">All unlocked tracks</option>
+              </select></label>
+              <label class="control">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label>
+            </div>
+            <div class="gen-hint">With text in “Local text idea”, Generate uses it (and the Change target) instead of the style sliders.</div>
+          </div>
+          <div class="gen-h" style="margin-top:10px">Track tools (selected track)</div>
           <div class="row"><label class="control">Pulses<input id="euclidPulses" type="number" min="0" max="16" value="5"></label><label class="control">Steps<input id="euclidSteps" type="number" min="1" max="16" value="16"></label></div>
           <div class="row"><label class="control">Rotate<input id="euclidRotate" type="number" min="-15" max="15" value="0"></label><label class="control">Humanize ms<input id="humanizeMs" type="number" min="0" max="80" value="12"></label></div>
-          <div class="gen-actions">
+          <div class="gen-actions three">
             <button id="applyEuclid" class="btn">Apply rhythm</button>
             <button id="humanizeTrack" class="btn">Humanize</button>
+            <button id="genActionFill" class="btn">Fill gaps</button>
           </div>
         </div></details>
 
-        <details class="morebox" id="aiBox"><summary>LLM connection</summary><div class="inside">
+        <!-- ============ CONNECTION CONFIG (LLM, collapsed disclosure) ============ -->
+        <details class="morebox" id="aiBox"><summary>Connection settings</summary><div class="inside">
           <p class="small">Bring your own key. It stays in this browser only and is sent <b>directly to the endpoint you configure</b> — never through any LOOPFORGE server. This is a personal-use convenience, not secure storage: any code on this origin, a browser extension, or device access could read it. A custom endpoint is a trust boundary — your key goes to whatever URL you set here.</p>
           <label class="control">Connection<select id="aiProfile"></select></label>
           <div class="gen-actions" style="margin-top:6px">
@@ -617,16 +723,17 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
           <div id="aiStatus" class="genresult">Add a key to let the model choose parameters; the local generator still writes the notes.</div>
         </div></details>
 
-        <details class="morebox" id="genLLMResult" style="display:none"><summary>Preview what is sent &amp; what is proposed</summary><div class="inside">
+        <!-- ============ TECHNICAL DETAILS (raw payload, collapsed) ============ -->
+        <details class="morebox" id="genLLMResult"><summary>Technical details</summary><div class="inside">
           <div class="small" style="margin-bottom:4px"><b>Sent to provider</b></div>
           <pre id="aiSent" class="aipre">—</pre>
-          <div class="small" style="margin:6px 0 4px"><b>Proposed locally</b></div>
+          <div class="small" style="margin:6px 0 4px"><b>Model decision</b></div>
           <pre id="aiProposal" class="aipre">—</pre>
         </div></details>
 
-        <div id="genResult" class="genresult">Changes stay editable. Locked tracks stay untouched.</div>
       </div>
       <div class="genmodal-foot">
+        <div class="gen-foot-status" id="genFootStatus"></div>
         <button id="genRunPrimary" class="btn primary" style="flex:1">Generate</button>
         <button id="genModalCancel" class="btn" style="flex:0 0 auto">Close</button>
       </div>
@@ -718,7 +825,25 @@ function clearHash(){
 }
 function scheduleAutosave(){if(restoring)return;clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{try{localStorage.setItem(LS_KEY,JSON.stringify(projectData()));const s=$('#saveStatus');if(s){s.textContent='[SAVED]';clearTimeout(s._t);s._t=setTimeout(()=>{s.textContent='[AUTO]'},1200)}}catch(_){}},700)}
 function markDirty(){scheduleAutosave()}
-function selectTab(name){$$('.sidepanel').forEach(p=>p.style.display='none');$$('.tab').forEach(x=>x.classList.remove('active'));const p=$('#'+name);if(p)p.style.display='block';const t=$$('.tab').find(x=>x.dataset.show===name);if(t)t.classList.add('active')}
+// Single source of truth for the right-hand editor tabs: the panel that is shown
+// and the tab that is marked active are driven by ONE call, so the two can never
+// disagree (the old bug: a tab looked active while its panel had display:none).
+function selectTab(name){
+  const tabs=$$('.tab');
+  const target=tabs.find(x=>x.dataset.show===name)||tabs[0];
+  const id=target?target.dataset.show:name;
+  $$('.sidepanel').forEach(p=>p.style.display='none');
+  tabs.forEach(x=>x.classList.remove('active'));
+  const p=$('#'+id);if(p)p.style.display='block';
+  if(target)target.classList.add('active');
+}
+// Pick the tab marked active in the markup (falls back to the first visible tab).
+// Used at startup so the initial sidebar always shows a real editor.
+function initialTabName(){
+  const marked=$$('.tab').find(x=>x.classList.contains('active')&&x.offsetParent!==null);
+  const firstVisible=$$('.tab').find(x=>x.offsetParent!==null);
+  return (marked||firstVisible||{}).dataset?.show||'sound';
+}
 function setMode(easy){document.body.classList.toggle('easy',!!easy);const b=$('#moreBtn');if(b){b.classList.toggle('on',!easy);b.textContent=easy?'More':'Less'}}
 function currentStepObj(){return tracks()[selectedTrack].steps[selectedStep]}
 function isPitchedTrack(tr){return tr&&tr.type==='synth'&&['bass','chord','melody','arp','texture'].includes(tr.role)}
@@ -1350,7 +1475,9 @@ function populateCurrentIdea(){
   for(let t=3;t<7;t++)for(let kk=0;kk<16;kk++)if(chance(d*.08))setStep(t,kk,1+Math.floor(Math.random()*2),chance(.3)?.5:1)
 }
 function generateIdea(){
-  checkpoint('New part');clearPattern();populateCurrentIdea();markForge(onKeys());renderAll();toast($('#genre').value+' · part '+currentPattern+' generated')
+  checkpoint('New part');clearPattern();populateCurrentIdea();markForge(onKeys());renderAll();
+  setFootStatus('New idea for part '+currentPattern+' · '+$('#genre').value+' generated.','ok');
+  toast($('#genre').value+' · part '+currentPattern+' generated')
 }
 function generateAllParts(){
   checkpoint('Make A–D');
@@ -1361,6 +1488,7 @@ function generateAllParts(){
   mutatePattern('B',seed^0xB,.14);mutatePattern('C',seed^0xC,.25);mutatePattern('D',seed^0xD,.36);
   $('#chain').value='A B C D';chainPos=0;markForge(onKeys('A'));switchPattern('A');
   $('#genResult').textContent='A is the base. B, C, and D are editable variations. Play all runs A → B → C → D.';
+  setFootStatus('Generated parts A–D. A is the base; B, C, D are variations.','ok');
   toast('Generated parts A–D')
 }
 function applyEuclid(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('Track is locked');checkpoint('Euclidean');const pulses=clamp(+$('#euclidPulses').value,0,16),n=clamp(+$('#euclidSteps').value,1,16),rot=+$('#euclidRotate').value||0;if(isPitchedTrack(tr))tr.noteEvents=[];else tr.steps.forEach(st=>Object.assign(st,stepTemplate()));for(let i=0;i<n;i++){const prev=Math.floor(i*pulses/n),next=Math.floor((i+1)*pulses/n);if(next>prev){const idx=((i+rot)%n+n)%n;if(isPitchedTrack(tr))addNote(tr,tr.note,idx,1,2);else tr.steps[idx].v=2}}markForge(onKeys());renderAll();toast('Euclidean '+pulses+'/'+n+' applied')}
@@ -1795,7 +1923,9 @@ function aiPhaseText(){
     case 'error':return aiLastError||'Request failed.'
     case 'applied':return aiLastApplied||'Applied.'
     default:return SecretStore.get(p.id)
-      ? 'Ready · '+p.name+' / '+p.model
+      ? (aiTestedOk
+          ? 'Connection OK · '+p.name+' / '+p.model
+          : 'Key set for \u201c'+p.name+'\u201d \u00b7 '+p.model+'. Not yet tested \u2014 use Test connection to verify.')
       : 'No key for \u201c'+p.name+'\u201d. Add one below to let the model choose parameters; the local generator still writes the notes.'
   }
 }
@@ -1806,6 +1936,10 @@ function setAiPhase(phase,msg){
   aiPhase=phase;
   const el=$('#aiStatus');
   if(el){el.textContent=aiPhaseText();el.classList.toggle('ai-warn',phase==='error')}
+  // Keep the compact connection summary, the proposal card and the footer status
+  // in lockstep with the state machine, even when the modal is open in LLM mode.
+  syncConnState();
+  syncProposalCard();
   syncGenCTA();
 }
 function refreshAiUI(){
@@ -1815,6 +1949,7 @@ function refreshAiUI(){
   // testing/asking/proposal/error phase the user still needs to see.
   if(aiPhase==='nokey'||aiPhase==='ready'||aiPhase==='applied')setAiPhase(has?'ready':'nokey');
   else syncGenCTA();
+  syncConnState();
 }
 function invalidateAiRequests(){aiRequestId++;if(aiAbort){try{aiAbort.abort()}catch(_){}aiAbort=null}}
 // Context fingerprint captures what Apply depends on: the active part, the key/scale,
@@ -1839,10 +1974,11 @@ function beginAiRequest(){
   aiAbort=controller;
   return {id,controller}
 }
+let aiTestedOk=false;
 function aiForget(){
   invalidateAiRequests();
   const p=aiActiveProfile();
-  SecretStore.clear(p.id);aiProposal=null;$('#aiKey').value='';$('#aiRemember').checked=false;
+  SecretStore.clear(p.id);aiProposal=null;aiTestedOk=false;$('#aiKey').value='';$('#aiRemember').checked=false;
   $('#aiSent').textContent='—';$('#aiProposal').textContent='—';
   setAiPhase('nokey','Key forgotten for '+p.name+'.');
 }
@@ -1857,8 +1993,9 @@ async function aiTest(){
     const payload={model:profile.model,messages:[{role:'user',content:'Reply with the single word ok.'}],temperature:0};
     await providerChat(payload,key,profile,controller.signal);
     if(id!==aiRequestId)return;
-    setAiPhase('ready','Connection OK. Ready · '+profile.name+' / '+profile.model)
-  }catch(e){if(id!==aiRequestId)return;setAiPhase('error','Connection test failed: '+(e.name==='AbortError'?'timed out':e.message))}
+    aiTestedOk=true;
+    setAiPhase('ready','Connection OK · '+profile.name+' / '+profile.model)
+  }catch(e){if(id!==aiRequestId)return;aiTestedOk=false;setAiPhase('error','Connection test failed: '+(e.name==='AbortError'?'timed out':e.message))}
   finally{clearTimeout(t);if(aiAbort===controller)aiAbort=null}
 }
 // aiAsk is the LLM producer. It ONLY runs for scope=current — A–D has no LLM
@@ -1868,8 +2005,10 @@ async function aiAsk(){
   const profile=aiActiveProfile(),key=SecretStore.get(profile.id);
   // Scope is checked FIRST so an A–D selection can never proceed on any engine.
   if($('#genScope').value!=='current'){toast('LLM A\u2013D not available yet');syncGenCTA();return}
-  if(!key)return toast('Add a key for this connection first');
-  const prompt=$('#genPrompt').value.trim();if(!prompt)return toast('Describe what you want first');
+  if(!key){syncPromptHelp('Add a key under Connection first.','err');return toast('Add a key for this connection first')}
+  const prompt=$('#genPrompt').value.trim();
+  // Empty prompt is validated INLINE (never toast-only) and never calls the provider.
+  if(!prompt){syncPromptValidation();syncGenCTA();return}
   aiProposal=null;
   // The preview must never look like "nothing happened": it opens immediately and
   // shows the WAITING state BEFORE the fetch is even issued.
@@ -1902,6 +2041,8 @@ async function aiAsk(){
     const msg=e.name==='AbortError'?'Request cancelled or timed out':e.message;
     $('#aiProposal').textContent='No valid proposal: '+msg;
     openLLMResult();
+    // Error stays visible inside the generator (footer status + connection summary),
+    // so the user never has to hunt through the connection section for it.
     setAiPhase('error','AI unavailable — nothing applied. Use the local generator instead.')
   }finally{clearTimeout(t);if(aiAbort===controller)aiAbort=null}
 }
@@ -1919,10 +2060,11 @@ function aiApply(){
 }
 function switchProfile(id){
   invalidateAiRequests();                       // abort any in-flight request for the old profile
-  aiProposal=null;$('#aiSent').textContent='—';$('#aiProposal').textContent='—';
+  aiProposal=null;aiTestedOk=false;$('#aiSent').textContent='—';$('#aiProposal').textContent='—';
   ProfileStore.activeId=id;ProfileStore.save();
   aiPhase=SecretStore.get(id)?'ready':'nokey';
-  loadProfileIntoForm();refreshProfileSelect();setAiPhase(aiPhase)
+  loadProfileIntoForm();refreshProfileSelect();setAiPhase(aiPhase);
+  openAiBoxIfNoKey();
 }
 function bindAI(){
   if(!$('#aiBox'))return;
@@ -1930,13 +2072,14 @@ function bindAI(){
   refreshProfileSelect();loadProfileIntoForm();
   const keyEl=$('#aiKey'),rem=$('#aiRemember');
   $('#aiProfile').addEventListener('change',e=>{switchProfile(e.target.value);toast('Connection: '+aiActiveProfile().name)});
-  keyEl.addEventListener('input',()=>{SecretStore.set(ProfileStore.activeId,keyEl.value.trim(),rem.checked);refreshAiUI()});
+  keyEl.addEventListener('input',()=>{SecretStore.set(ProfileStore.activeId,keyEl.value.trim(),rem.checked);aiTestedOk=false;refreshAiUI()});
   rem.addEventListener('change',()=>{SecretStore.set(ProfileStore.activeId,keyEl.value.trim(),rem.checked);toast(rem.checked?'Key kept for this tab only':'Key kept in memory only')});
   // Non-secret config edits persist to the profile (never to project/share/export).
   const saveCfg=()=>{
     const round=validateEndpoint($('#aiEndpoint').value.trim());
     if(!round.ok){$('#aiEndpointWarn').style.display='block';$('#aiEndpointWarn').textContent='Endpoint not saved: '+round.error;return}
     ProfileStore.update(ProfileStore.activeId,{name:$('#aiName').value.trim()||'Connection',endpoint:round.url,model:$('#aiModel').value.trim()});
+    aiTestedOk=false;                            // config changed → connection no longer verified
     refreshProfileSelect();loadProfileIntoForm()
   };
   $('#aiName').addEventListener('change',saveCfg);
@@ -1964,38 +2107,139 @@ function bindAI(){
    No duplicated executor: the dialog only chooses which producer runs.
    ========================================================================= */
 let genEngine='native';
+let genMode='new';                            // Native: 'new' | 'variation'
 // Scope is authoritative: it alone decides Current vs A–D. There is deliberately
-// NO separate "Generate A–D" button — one footer CTA reflects engine + scope + state.
+// NO separate "Generate A–D" button — one footer CTA reflects engine + scope + mode.
 function genScope(){return $('#genScope').value==='all'?'all':'current'}
 function openLLMResult(open){
   const box=$('#genLLMResult');if(!box)return;
-  box.style.display='block';
-  if(open!==false)box.open=true;
+  box.open=open!==false;
+}
+// Native's local-text capability lives in More/Tools (kept, not removed).
+function nativePrompt(){const el=$('#genPromptLocal');return el?el.value.trim():''}
+function nextPartName(){const order=['A','B','C','D'];return order[(order.indexOf(currentPattern)+1)%4]}
+function setFootStatus(text,kind){
+  const el=$('#genFootStatus');if(!el)return;
+  el.className='gen-foot-status'+(text?' show':'')+(kind?' '+kind:'');
+  el.textContent=text||'';
+}
+// Native produces: New idea (current), New idea (A–D), or Variation → next part.
+function nativeCTALabel(){
+  if(genMode==='variation')return 'Create variation \u2192 '+nextPartName();
+  return genScope()==='all'?'Generate A\u2013D':'Generate';
 }
 // The single workflow CTA. Its label/handler is a pure function of
-// (engine, scope, proposal state) — never a hidden fallback between engines.
+// (engine, scope, native mode, proposal state, asking state) — never a hidden
+// fallback between engines, and never a label that the handler disagrees with.
 function syncGenCTA(){
   const btn=$('#genRunPrimary');if(!btn)return;
   const llm=genEngine==='llm',scope=genScope();
-  const act=$('#genActionSec');if(act)act.style.display=llm?'none':'';
   if(!llm){
-    btn.textContent=scope==='all'?'Generate A\u2013D':'Generate';
+    btn.textContent=nativeCTALabel();
     btn.disabled=false;btn.title='';
+    setFootStatus('');
     return
   }
-  // INVARIANT: while Engine=LLM and scope=A\u2013D, whole-song LLM is unsupported,
-  // so the CTA is disabled regardless of whether a Current-part proposal exists.
-  // Scope is therefore checked BEFORE aiProposal. The proposal itself is kept
-  // (not discarded) so switching back to Current can offer Apply again.
-  if(scope==='all'){btn.textContent='LLM A\u2013D not available yet';btn.disabled=true;btn.title='Whole-song LLM generation is not implemented; use the Native engine for A\u2013D'}
-  else if(aiProposal){btn.textContent='Apply proposal';btn.disabled=false;btn.title='Apply the proposed parameters via the local generator'}
-  else{btn.textContent='Ask LLM';btn.disabled=false;btn.title=''}
+  // INVARIANT: while Engine=LLM and scope=A\u2013D, whole-song LLM is unsupported.
+  // Scope wins over any ready proposal, so a Current proposal is never applied
+  // while A\u2013D is selected. The proposal is kept so Current can offer Apply again.
+  if(scope==='all'){
+    btn.textContent='LLM A\u2013D not available yet';btn.disabled=true;
+    btn.title='Whole-song LLM generation is not implemented; switch to the Native engine for A\u2013D';
+    return
+  }
+  // Asking: the CTA is disabled and says so. This is the single source of truth
+  // that prevents a double click from issuing a second provider request.
+  if(aiPhase==='asking'){btn.textContent='Asking\u2026';btn.disabled=true;btn.title='Waiting for the provider';}
+  else if(aiProposal){btn.textContent='Apply proposal';btn.disabled=false;btn.title='Apply the proposed parameters via the local generator';}
+  else{btn.textContent='Ask LLM';btn.disabled=true;btn.title='Describe what you want to change first';}
+  // Enable only when there is a non-empty prompt (Ask) or a ready proposal (Apply).
+  const promptReady=$('#genPrompt')&&$('#genPrompt').value.trim().length>0;
+  if(aiPhase!=='asking'&&!aiProposal)btn.disabled=!promptReady;
+  syncGenFooterStatus();
+}
+function syncGenFooterStatus(){
+  if(genEngine!=='llm'){setFootStatus('');return}
+  if(aiPhase==='asking'){setFootStatus('Asking '+aiActiveProfile().name+' for parameters\u2026','busy');return}
+  if(aiPhase==='error'){setFootStatus(aiLastError||'Request failed. Nothing applied.','err');return}
+  if(aiPhase==='proposal'){setFootStatus('Proposal ready \u2014 review it, then Apply. Nothing has changed yet.','ok');return}
+  if(aiPhase==='applied'){setFootStatus(aiLastApplied||'Applied.','ok');return}
+  const has=SecretStore.get(aiActiveProfile().id);
+  setFootStatus(has?'Ready to ask.':'Add a key under Connection to use the LLM.','');
+}
+function syncProposalCard(){
+  const card=$('#genProposalCard');if(!card)return;
+  const rows=$('#genProposalRows');
+  if(genEngine!=='llm'||!aiProposal){card.classList.remove('show');return}
+  const d=aiProposal.decision;
+  card.classList.add('show');
+  const title={drums:'Drums',bass:'Bass',harmony:'Harmony',melody:'Melody / arp'}[d.target]||d.target;
+  const preserve=d.preserve.length?d.preserve.join(', '):'nothing kept';
+  rows.innerHTML=
+    '<div class="gp-row"><span>Change</span><b>'+escHtml(title)+'</b></div>'
+    +'<div class="gp-row"><span>Style</span><b>'+escHtml(d.style)+'</b></div>'
+    +'<div class="gp-row"><span>Density</span><b>'+Math.round(d.density*100)+'%</b></div>'
+    +'<div class="gp-row"><span>Syncopation</span><b>'+Math.round(d.syncopation*100)+'%</b></div>'
+    +'<div class="gp-row"><span>Humanize</span><b>'+d.humanizeMs+' ms</b></div>'
+    +'<div class="gp-row"><span>Variation</span><b>'+Math.round(d.variation*100)+'%</b></div>'
+    +'<div class="gp-row"><span>Keep</span><b>'+escHtml(preserve)+'</b></div>';
+}
+// Reflect engine + native mode into the DOM. Visibility only — no mutation.
+function syncGenUI(){
+  const llm=genEngine==='llm';
+  const native=document.getElementById('genNativeUI');if(native)native.style.display=llm?'none':'';
+  const llmui=document.getElementById('genLLMUI');if(llmui)llmui.style.display=llm?'':'none';
+  const ai=document.getElementById('aiBox');if(ai)ai.style.display=llm?'':'none';
+  const res=$('#genLLMResult');if(res)res.style.display=llm?'block':'none';
+  // Native New idea vs Variation: only show controls the handler actually reads.
+  const isVar=!llm&&genMode==='variation';
+  // Scope is read by Native New idea (current/A–D) and by the LLM A–D gate, but
+  // NOT by variationToNext — so hide it in Variation mode instead of pretending.
+  const scopeSec=$('#genScopeSec');
+  if(scopeSec)scopeSec.style.display=(!llm&&isVar)?'none':'';
+  const newUI=$('#genNewUI');if(newUI)newUI.style.display=(!llm&&genMode==='new')?'':'none';
+  const varUI=$('#genVarUI');if(varUI)varUI.style.display=isVar?'':'none';
+  // Native-only generation controls inside More stay hidden while LLM is selected;
+  // the shared track tools (Euclid/Humanize/Fill gaps) remain available.
+  const moreNative=$('#genMoreNative');if(moreNative)moreNative.style.display=llm?'none':'';
+  $$('#genMode button').forEach(b=>{const on=b.dataset.mode===genMode;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false')});
+  const from=$('#genVarFrom'),to=$('#genVarTo');
+  if(from)from.textContent=currentPattern;
+  if(to)to.textContent=nextPartName();
+  const mh=$('#genModeHint');
+  if(mh)mh.textContent=genMode==='variation'
+    ? 'Variation is selected. Nothing changes until you press the button.'
+    : 'New idea writes a fresh version of the current part (or all parts for A–D).';
+  // Connection summary + context reflect live values.
+  const p=aiActiveProfile();
+  const cn=$('#genConnName');if(cn)cn.textContent=p.name;
+  const cm=$('#genConnModel');if(cm)cm.textContent=p.endpoint+' · '+p.model;
+  const ck=$('#genContextKey');if(ck)ck.textContent=$('#key').value+' · '+$('#scale').value;
+  syncConnState();
+  syncProposalCard();
+  syncPromptValidation();
+  syncGenCTA();
+}
+function connStateText(){
+  if(aiPhase==='testing')return {t:'Testing connection\u2026',k:'warn'};
+  if(aiPhase==='asking')return {t:'Asking\u2026',k:'warn'};
+  if(aiPhase==='proposal')return {t:'Proposal ready',k:'ok'};
+  if(aiPhase==='error')return {t:'Error',k:'err'};
+  if(aiPhase==='applied')return {t:'Applied',k:'ok'};
+  if(!SecretStore.get(aiActiveProfile().id))return {t:'No key',k:'warn'};
+  return aiTestedOk?{t:'Connection OK',k:'ok'}:{t:'Key set',k:''};
+}
+function syncConnState(){
+  const el=$('#genConnState');if(!el)return;
+  const s=connStateText();
+  el.textContent=s.t;
+  el.className='gen-conn-state'+(s.k?' '+s.k:'');
 }
 function openGenerator(){
   const m=$('#genModal');if(!m)return;
   m.classList.add('open');
   document.body.style.overflow='hidden';
-  // reflect current engine
+  openAiBoxIfNoKey();
   setGenEngine(genEngine);
 }
 function closeGenerator(){
@@ -2003,45 +2247,36 @@ function closeGenerator(){
   m.classList.remove('open');
   document.body.style.overflow='';
 }
+function openAiBoxIfNoKey(){
+  const box=$('#aiBox');if(!box)return;
+  // Auto-open only when the user has no key yet; a configured setup stays collapsed.
+  if(!SecretStore.get(aiActiveProfile().id))box.open=true;
+}
 function setGenEngine(engine){
   genEngine=(engine==='llm')?'llm':'native';
   const llm=genEngine==='llm';
   $$('#genEngine button').forEach(b=>b.classList.toggle('on',b.dataset.engine===genEngine));
-  // Hide all LLM/API/security noise when Engine=Native.
-  const ai=document.getElementById('aiBox');if(ai)ai.style.display=llm?'':'none';
-  // The preview belongs to the main generator flow, not to connection settings;
-  // it is only relevant while the LLM engine is selected.
-  const res=$('#genLLMResult');if(res&&!llm)res.style.display='none';
-  else if(res&&llm)res.style.display='block';
-  // Action buttons are Native-only for now: in LLM mode the typed reshape is the
-  // only producer, so New idea / Variation / Fill gaps are not shown at all.
-  if(llm){aiPhase=aiProposal?'proposal':(SecretStore.get(aiActiveProfile().id)?'ready':'nokey');setAiPhase(aiPhase)}else refreshAiUI();
-  syncGenCTA();
-  // Opening the dialog must never change the project — this only toggles visibility.
+  if(llm){aiPhase=aiProposal?'proposal':(SecretStore.get(aiActiveProfile().id)?'ready':'nokey');setAiPhase(aiPhase);openAiBoxIfNoKey()}
+  else refreshAiUI();
+  syncGenUI();
 }
+// Native generation routing. The local-text box (More) is optional: New idea with
+// no text uses the style sliders, exactly as the controls promise.
 function runNativeGenerate(scope){
-  const prompt=$('#genPrompt').value.trim();
+  if(genMode==='variation'){variationToNext();return}
   if(scope==='all'){generateAllParts();return}
-  if(prompt){runGen();return}                 // text present → local prompt generation
-  generateIdea();                             // no text → feel-based new part
+  if(nativePrompt()){runGen();return}          // text present → local prompt generation
+  generateIdea();                              // no text → style/density-based new part
 }
-
-/* ---------- dialog actions ---------- */
-function genAction(kind){
-  if(kind==='new'){runGen();return}
-  if(kind==='variation'){variationToNext();return}
-  if(kind==='fill'){fillGaps();return}
-}
-// The one and only CTA click. Engine and scope are read here, live.
+// The one and only CTA click. Engine, mode and scope are read here, live.
 function runPrimaryCTA(){
   if(genEngine==='llm'){
-    // Same invariant as syncGenCTA: scope A\u2013D wins over any ready proposal,
-    // so the Current-part proposal can never be applied while A\u2013D is selected.
+    // Same invariant as syncGenCTA: scope A–D wins over any ready proposal.
     if(genScope()==='all'){toast('LLM A\u2013D not available yet');syncGenCTA();return}
-    if(aiProposal){aiApply();return}         // proposal ready → Apply
+    if(aiProposal){aiApply();return}           // proposal ready → Apply
     aiAsk();return
   }
-  if(aiProposal)aiProposal=null;             // leaving LLM state behind
+  if(aiProposal)aiProposal=null;               // leaving LLM state behind
   runNativeGenerate(genScope());
 }
 function bindGeneratorDialog(){
@@ -2052,16 +2287,48 @@ function bindGeneratorDialog(){
   m.addEventListener('pointerdown',e=>{if(e.target===m)closeGenerator()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&m.classList.contains('open'))closeGenerator()});
   $$('#genEngine button').forEach(b=>b.onclick=()=>setGenEngine(b.dataset.engine));
+  // Mode selection: only selects. It never checkpoints, mutates or generates.
+  $$('#genMode button').forEach(b=>b.onclick=()=>{genMode=b.dataset.mode==='variation'?'variation':'new';syncGenUI()});
   $('#genRunPrimary').onclick=runPrimaryCTA;
-  $('#genScope').addEventListener('change',syncGenCTA);
-  $('#genActionNew').onclick=()=>genAction('new');
-  $('#genActionVariation').onclick=()=>genAction('variation');
-  $('#genActionFill').onclick=()=>genAction('fill');
-  setGenEngine('native')
+  $('#genScope').addEventListener('change',()=>{syncGenCTA();syncScopeHelp()});
+  $('#genActionFill').onclick=()=>fillGaps();       // tool, not a generation mode
+  const cfg=$('#genConnConfigure');if(cfg)cfg.onclick=()=>{const box=$('#aiBox');if(box)box.open=!box.open};
+  const cp=$('#genPrompt');if(cp)cp.addEventListener('input',()=>{syncPromptValidation();syncGenCTA()});
+  const keySel=$('#key'),scSel=$('#scale');
+  if(keySel)keySel.addEventListener('change',syncGenUI);
+  if(scSel)scSel.addEventListener('change',syncGenUI);
+  setGenEngine('native');
+  syncScopeHelp();
+  syncPromptValidation();
+}
+function syncScopeHelp(){
+  const el=$('#genScopeHelp');if(!el)return;
+  el.classList.toggle('show',genEngine==='llm'&&genScope()==='all');
+}
+// Inline validation for the primary LLM form control. Visible next to the field,
+// never toast-only, and it gates the CTA.
+function syncPromptHelp(text,kind){
+  const help=$('#genPromptHelp');if(!help)return;
+  help.textContent=text||'Describe what you want to change.';
+  help.classList.add('show');
+  help.classList.toggle('err',kind==='err');
+}
+function syncPromptValidation(){
+  const ta=$('#genPrompt');
+  if(!ta)return;
+  const empty=ta.value.trim().length===0;
+  const show=empty&&genEngine==='llm';
+  const help=$('#genPromptHelp');
+  if(help){
+    help.textContent='Describe what you want to change.';
+    help.classList.toggle('show',show);
+    help.classList.toggle('err',false);
+  }
+  ta.classList.toggle('invalid',show);
 }
 
-function runGen(){const prompt=$('#genPrompt').value.trim(),target=$('#genTarget').value,seed=(+$('#genSeed').value||0)>>>0,intent=parseIntent(prompt),rng=seeded(seed^hash32(prompt+'|'+currentPattern+'|'+target));checkpoint('Generate');const ids=targetIndexes(target,intent.q);if(!ids.length)return toast('No writable target: locked or preserved by prompt');ids.forEach(i=>genRoleTrack(i,intent,rng,true));$('#genResult').textContent=describeIntent(intent,target)+` · changed ${ids.length} track(s) · locks/preserve respected`;markForge(onKeys());renderAll();toast('Generation applied')}
-function fillGaps(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('Selected track is locked');checkpoint('Fill gaps');const rng=seeded((+$('#genSeed').value||0)^hash32($('#genPrompt').value+'fill'+selectedTrack));if(isPitchedTrack(tr)){const occupied=new Set(noteEvents(tr).map(n=>n.start));for(let k=0;k<16;k++){if(occupied.has(k))continue;const prev=occupied.has((k+15)%16),next=occupied.has((k+1)%16);if((prev||next)&&rng()<.28)addNote(tr,tr.note,k,1,1,.5,Math.round((rng()*2-1)*10))}}else{for(let k=0;k<16;k++){if(tr.steps[k].v)continue;const prev=tr.steps[(k+15)%16].v,next=tr.steps[(k+1)%16].v;if((prev||next)&&rng()<.34){tr.steps[k].v=1;tr.steps[k].p=.5;tr.steps[k].shift=Math.round((rng()*2-1)*10)}}}markForge(onKeys());renderAll();toast('Gaps filled with ghost notes')}
+function runGen(){const prompt=nativePrompt(),target=$('#genTarget').value,seed=(+$('#genSeed').value||0)>>>0,intent=parseIntent(prompt),rng=seeded(seed^hash32(prompt+'|'+currentPattern+'|'+target));checkpoint('Generate');const ids=targetIndexes(target,intent.q);if(!ids.length)return toast('No writable target: locked or preserved by prompt');ids.forEach(i=>genRoleTrack(i,intent,rng,true));$('#genResult').textContent=describeIntent(intent,target)+` · changed ${ids.length} track(s) · locks/preserve respected`;markForge(onKeys());renderAll();setFootStatus('Generated with local text \u00b7 '+ids.length+' track(s).','ok')}
+function fillGaps(){const tr=tracks()[selectedTrack];if(tr.locked)return toast('Selected track is locked');checkpoint('Fill gaps');const rng=seeded((+$('#genSeed').value||0)^hash32(nativePrompt()+'fill'+selectedTrack));if(isPitchedTrack(tr)){const occupied=new Set(noteEvents(tr).map(n=>n.start));for(let k=0;k<16;k++){if(occupied.has(k))continue;const prev=occupied.has((k+15)%16),next=occupied.has((k+1)%16);if((prev||next)&&rng()<.28)addNote(tr,tr.note,k,1,1,.5,Math.round((rng()*2-1)*10))}}else{for(let k=0;k<16;k++){if(tr.steps[k].v)continue;const prev=tr.steps[(k+15)%16].v,next=tr.steps[(k+1)%16].v;if((prev||next)&&rng()<.34){tr.steps[k].v=1;tr.steps[k].p=.5;tr.steps[k].shift=Math.round((rng()*2-1)*10)}}}markForge(onKeys());renderAll();toast('Gaps filled with ghost notes')}
 // Shared Similar↔Wild core for one track. amount = chance to touch, intensity = 0..1 wildness.
 function mutateTrack(tr,i,rng,amount,intensity){
   if(!tr||tr.locked)return;
@@ -2095,13 +2362,15 @@ function variationToNext(){
   checkpoint('Variation');
   const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];
   const amt=clamp((+$('#variAmount').value||0)/100,0,1);
-  const seed=(+$('#genSeed').value||0)^hash32($('#genPrompt').value+n);
+  const seed=(+$('#genSeed').value||0)^hash32(nativePrompt()+n);
   state.patterns[n]=cloneData(state.patterns[currentPattern]);
   // Similar↔Wild maps to mutate amount plus how much pitch/rhythm churn is allowed
   mutatePattern(n,seed,.02+amt*.5,amt);
   markForge(onKeys(n));switchPattern(n);
   const label=amt<.2?'a close variation':amt>.7?'a wild variation':'a variation';
   $('#genResult').textContent=`Created ${label} in ${n} (${Math.round(amt*100)}% wild); locked tracks preserved.`;
+  syncGenUI();
+  setFootStatus('Created '+label+' in '+n+'. Locked tracks preserved.','ok');
   toast(`Variation → ${n}`)
 }
 function buildSong(){generateAllParts()}
@@ -2255,7 +2524,11 @@ const typingMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:7
 
 async function init(){
   setMode(localStorage.getItem(LS_MODE)!=='advanced');
-  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';commitBpm($('#bpm').value);migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();bindGeneratorDialog();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
+  // Startup fix: the sidebar used to render with the Sound tab looking active
+  // while its panel still had display:none, leaving a blank editor. One call now
+  // makes the visible panel and the active tab agree, before anything else paints.
+  selectTab(initialTabName());
+  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';commitBpm($('#bpm').value);migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();bindGeneratorDialog();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();selectTab(initialTabName());updateAudioStatus();
   if(!navigator.requestMIDIAccess){$('#midiBtn').disabled=true;$('#midiBtn').textContent='MIDI n/a';$('#midiBtn').title='Web MIDI is not supported by this browser'}
   document.addEventListener('pointerdown',primeAudio,{once:true,passive:true});
   document.addEventListener('touchend',primeAudio,{once:true,passive:true});
@@ -2288,7 +2561,7 @@ async function init(){
   swingEl.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(e.key)&&!swingEl._g){swingEl._g=true;checkpoint('Swing')}});
   swingEl.addEventListener('keyup',()=>{swingEl._g=false});
   swingEl.addEventListener('blur',()=>{swingEl._g=false});
-  swingEl.oninput=e=>{$('#swingVal').textContent=e.target.value+'%';markDirty()};$('#echo').oninput=e=>{$('#echoVal').textContent=e.target.value+'%';setEcho(e.target.value/100);markDirty()};$('#scBtn').onclick=()=>{sidechain=!sidechain;$('#scBtn').classList.toggle('primary',sidechain);markDirty();toast(sidechain?'Sidechain on: kick ducks the bass':'Sidechain off')};$('#chain').addEventListener('input',markDirty);$('#key').addEventListener('change',markDirty);$('#scale').addEventListener('change',markDirty);$('#blankBtn').onclick=blankLoop;$('#variAmount').oninput=e=>{$('#variVal').textContent=e.target.value+'%';markDirty()};$('#variVal').textContent=$('#variAmount').value+'%';$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;$('#promptChips').onclick=e=>{const b=e.target.closest('button');if(!b)return;e.preventDefault();const ta=$('#genPrompt');ta.value=(ta.value.trim()?ta.value.trim()+' ':'')+b.dataset.w;ta.focus()};
+  swingEl.oninput=e=>{$('#swingVal').textContent=e.target.value+'%';markDirty()};$('#echo').oninput=e=>{$('#echoVal').textContent=e.target.value+'%';setEcho(e.target.value/100);markDirty()};$('#scBtn').onclick=()=>{sidechain=!sidechain;$('#scBtn').classList.toggle('primary',sidechain);markDirty();toast(sidechain?'Sidechain on: kick ducks the bass':'Sidechain off')};$('#chain').addEventListener('input',markDirty);$('#key').addEventListener('change',markDirty);$('#scale').addEventListener('change',markDirty);$('#blankBtn').onclick=blankLoop;$('#variAmount').oninput=e=>{$('#variVal').textContent=e.target.value+'%';markDirty()};$('#variVal').textContent=$('#variAmount').value+'%';$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;$('#promptChips').onclick=e=>{const b=e.target.closest('button');if(!b)return;e.preventDefault();const ta=$('#genPrompt');ta.value=(ta.value.trim()?ta.value.trim()+' ':'')+b.dataset.w;ta.focus();syncPromptValidation();syncGenCTA()};
   $('#previewSound').onclick=async()=>{
     if(previewSource){stopSoundPreview();return}
     if(!await ensureAudio())return toast('Audio is blocked. Tap again.');
