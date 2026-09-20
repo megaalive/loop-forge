@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.7.3 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.7.4 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.7.3 — review fixes ===== */
+/* ===== LOOPFORGE-16 v4.7.4 — review fixes ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -512,7 +512,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.7.3', STEPS=16, TRACKS=16;
+const APP_VERSION='4.7.4', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -530,7 +530,7 @@ let iosAudioBridge=null, iosAudioBridgeUrl=null;
 const noiseBufferCache=new WeakMap();
 let trackBuses=Array(TRACKS).fill(null), previewSource=null, previewTrackIndex=-1;
 let renderMaster=null, renderBuses=null;
-let analyser=null, vizCtx=null, meterRAF=null, lastMeter=0;
+let analyser=null, vizCtx=null, meterRAF=null, lastMeter=0, previewSynthTimer=null;
 let echoSend=null, echoDelay=null, echoFb=null, echoWet=null, sidechain=false;
 const visualTimers=new Set();
 const LS_KEY='loopforge16-v4', LS_MODE='loopforge-mode';
@@ -1309,6 +1309,10 @@ async function init(){
       return
     }
     syncTrackBuses();
+    startMeters();
+    const dur=Math.max(.35,tr.attack+tr.decay+tr.release+.2);
+    clearTimeout(previewSynthTimer);
+    previewSynthTimer=setTimeout(()=>{if(!isPlaying&&!previewSource)stopMeters()},dur*1000+80);
     hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)
   };$('#sampleFile').onchange=e=>e.target.files[0]&&loadSample(e.target.files[0]);$('#wave').onclick=e=>{if(!sampleBuffers[selectedTrack])return;const rect=e.currentTarget.getBoundingClientRect();const s=clamp(Math.floor((e.clientX-rect.left)/rect.width*16),0,15);selectedStepObjAssignSlice(s,true)};
   $('#exportWavBtn').onclick=()=>exportWav().catch(e=>{console.error(e);toast('WAV export failed: '+e.message)});$('#stemWavBtn').onclick=()=>exportStem().catch(e=>{console.error(e);toast('Stem export failed: '+e.message)});

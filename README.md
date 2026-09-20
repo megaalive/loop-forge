@@ -70,6 +70,10 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 - **Mixer per-part di export benar**: `renderOffline()` dulu menulis `gain`/`pan` langsung (nilai part terakhir menang untuk seluruh lagu). Sekarang dijadwalkan di tiap batas bar dengan `setValueAtTime(value, barStart)`, jadi volume/pan/mute/solo part A/B/C/D berubah tepat saat part berganti, sama seperti realtime.
 - **Kick yang di-mute atau ter-exclude solo tidak lagi memicu duck**: blok sidechain untuk bass stem kini memeriksa `!tr.mute && (!anySolo || tr.solo)` sebelum menjadikan kick sebagai trigger, konsisten dengan full mix.
 
+## Perbaikan 4.7.4
+
+- **Visualizer pada synth audition**: **Hear this sound** pada track synth kini menyalakan oscilloscope/VU seperti sample preview, lalu menghentikannya setelah nada selesai (berdasarkan attack+decay+release), kecuali sedang playing atau ada preview yang lebih baru.
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -86,4 +90,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.7.3**.
+Versi saat ini: **4.7.4**.
