@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.7.6 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.8.0 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.7.6 — review fixes ===== */
+/* ===== LOOPFORGE-16 v4.8.0 — note helpers ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -222,6 +222,17 @@ input[type=range]{padding:0!important;accent-color:var(--accent)}
 .inline-piano-side{padding:10px 8px;color:var(--text-faint);font-size:10px;border-right:1px solid var(--border-soft)}
 .inline-piano-side b{display:block;color:var(--text-dim);font-size:11px;margin-bottom:3px}
 .inline-piano-side small{display:block;margin-top:5px;line-height:1.35}
+.note-tools{margin-top:7px}
+.note-tools .nt-label{display:block;color:var(--text-faint);font-size:9px;text-transform:uppercase;letter-spacing:.06em;margin:6px 0 3px}
+.note-tools .nt-row{display:flex;flex-wrap:wrap;gap:3px}
+.note-tools button{border:1px solid var(--border);background:var(--surface-3);color:var(--text-dim);border-radius:var(--radius-sm);padding:3px 6px;font-size:10px;font-weight:700;cursor:pointer}
+.note-tools button:hover{border-color:var(--accent-2);color:var(--accent-2)}
+.note-tools button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.suggest{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
+.suggest button{border:1px dashed var(--accent-dim);background:transparent;color:var(--accent);border-radius:var(--radius-sm);padding:3px 6px;font-size:10px;font-weight:700;cursor:pointer}
+.suggest button:hover{background:var(--accent-soft)}
+.autosnap{display:flex;align-items:center;gap:5px;margin-top:8px;color:var(--text-faint);font-size:10px;cursor:pointer}
+.autosnap input{margin:0}
 .inline-piano .piano-cell{touch-action:none}
 .inline-piano-scroll{overflow:auto;max-height:210px;padding:5px 7px 7px}
 .inline-piano-grid{min-width:780px}
@@ -512,7 +523,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.7.6', STEPS=16, TRACKS=16;
+const APP_VERSION='4.8.0', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -840,6 +851,44 @@ function hit(ac,tr,when,vel=.8,noteOverride=null,bufferOverride=null,slice=0,tra
 function metroClick(ac,when,accent=false){const o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=accent?1400:950;g.gain.setValueAtTime(.12,when);g.gain.exponentialRampToValueAtTime(.0001,when+.035);o.connect(g);g.connect(ac===ctx?master:ac.destination);o.start(when);o.stop(when+.04)}
 
 function scaleNotes(key,scale){const root=keys.indexOf(key),shapes={Minor:[0,2,3,5,7,8,10],Major:[0,2,4,5,7,9,11],Dorian:[0,2,3,5,7,9,10],Phrygian:[0,1,3,5,7,8,10],Pentatonic:[0,3,5,7,10]};return shapes[scale].map(x=>(x+root)%12)}
+const CHORD_SHAPES={maj:[0,4,7],min:[0,3,7],'7':[0,4,7,10],maj7:[0,4,7,11],min7:[0,3,7,10],sus2:[0,2,7],sus4:[0,5,7]};
+function inScale(pitch){const pc=((pitch%12)+12)%12;return scaleNotes($('#key').value,$('#scale').value).includes(pc)}
+function snapToScale(pitch){const pc=((pitch%12)+12)%12,sc=scaleNotes($('#key').value,$('#scale').value);if(sc.includes(pc))return pitch;let best=null,bestD=99;for(const s of sc){let d=s-pc;if(d>6)d-=12;if(d<-6)d+=12;if(Math.abs(d)<bestD){bestD=Math.abs(d);best=pitch+d}}return best==null?pitch:clamp(best,24,108)}
+function chordPitches(rootPitch,shape){
+  const iv=CHORD_SHAPES[shape]||CHORD_SHAPES.maj;
+  return iv.map(x=>clamp(rootPitch+x,24,108))
+}
+function suggestPitches(tr){
+  const ns=noteEvents(tr),sc=scaleNotes($('#key').value,$('#scale').value),out=[];
+  if(!ns.length){
+    const base=tr.role==='bass'?36:60;
+    return [...new Set([base,base+sc[2],base+sc[4]].map(snapToScale))]
+  }
+  const last=[...ns].sort((a,b)=>(b.start-a.start)||(b.pitch-a.pitch))[0];
+  for(const d of [-1,1,-2,2,4,7,-5,-3]){
+    if(out.length>=4)break;
+    const p=last.pitch+d;
+    if(p<24||p>108)continue;
+    if(inScale(p)&&!out.includes(p))out.push(p)
+  }
+  return out
+}
+function addChordAt(tr,step,shape,rootPitch){
+  if(tr.locked){toast('Track is locked');return}
+  checkpoint('Add chord');
+  chordPitches(rootPitch,shape).forEach(p=>addNote(tr,p,step,Math.min(4,STEPS-step),2,1,0));
+  renderAll();toast('Chord '+shape+' added')
+}
+function snapTrackToScale(tr){
+  if(tr.locked){toast('Track is locked');return}
+  const ns=noteEvents(tr);if(!ns.length)return toast('No notes to snap');
+  checkpoint('Snap to scale');
+  ns.forEach(n=>{n.pitch=snapToScale(n.pitch)});
+  tr.noteEvents=ns.filter((n,i,arr)=>arr.findIndex(m=>m.pitch===n.pitch&&m.start===n.start)===i);
+  renderAll();toast('Snapped to scale')
+}
+let autoSnap=false;
+let chordShape='maj';
 function resolvedNote(tr,i,s,step){if(s.n!=null)return s.n;if(tr.type==='synth'&&i>=8){const sc=scaleNotes($('#key').value,$('#scale').value);return 48+sc[(step+i)%sc.length]+(i>11?12:0)}return tr.note}
 function secondsPerStep(){return 60/(+$('#bpm').value||112)/4}
 function scheduleVisualAt(audioTime,fn){
@@ -919,7 +968,8 @@ function migrateState(){for(const p of ['A','B','C','D']){if(!state.patterns[p])
 
 function renderInlinePiano(tr,i){
   const wrap=document.createElement('div');wrap.className='inline-piano';
-  const side=document.createElement('div');side.className='inline-piano-side';side.innerHTML='<b>'+escHtml(tr.name)+'</b>polyphonic notes<small>Click = add/remove · drag = note length<br>Different pitches at one step = chord</small>';wrap.appendChild(side);
+  const side=document.createElement('div');side.className='inline-piano-side';side.innerHTML='<b>'+escHtml(tr.name)+'</b>polyphonic notes<small>Click = add/remove · drag = note length</small>';wrap.appendChild(side);
+  side.appendChild(buildNoteTools(tr,i));
   const scroll=document.createElement('div');scroll.className='inline-piano-scroll';
   const grid=document.createElement('div');grid.className='inline-piano-grid';
   const used=noteEvents(tr).map(x=>x.pitch),center=used.length?Math.round(used.reduce((a,b)=>a+b,0)/used.length):tr.note;
@@ -927,7 +977,29 @@ function renderInlinePiano(tr,i){
   for(let pitch=top;pitch>=bottom;pitch--){const pr=document.createElement('div');pr.className='inline-piano-row';const label=document.createElement('div');label.className='inline-piano-label';label.textContent=noteName(pitch);pr.appendChild(label);for(let k=0;k<STEPS;k++){const ev=noteCovering(tr,pitch,k),c=document.createElement('button');c.className='piano-cell '+([1,3,6,8,10].includes(((pitch%12)+12)%12)?'black ':'')+(ev?(k===ev.start?'note-start':'note-tail'):'');c.dataset.step=k;c.dataset.pitch=pitch;c.dataset.track=i;c.title=tr.name+' · '+noteName(pitch)+' · step '+(k+1);c.setAttribute('aria-label',c.title);c.onpointerdown=e=>beginNoteGesture(e,i,pitch,k);c.oncontextmenu=e=>{e.preventDefault();if(tr.locked)return;const hit=noteCovering(tr,pitch,k);if(!hit)return;checkpoint('Remove note');removeNote(tr,hit);renderAll()};pr.appendChild(c)}grid.appendChild(pr)}
   scroll.appendChild(grid);wrap.appendChild(scroll);return wrap;
 }
-function beginNoteGesture(e,i,pitch,step){if(e.button!==0)return;const tr=tracks()[i];if(tr.locked){toast('Track is locked');return}e.preventDefault();selectedTrack=i;selectedStep=step;const existing=noteCovering(tr,pitch,step),origin=step;const finish=up=>{document.removeEventListener('pointerup',finish);const el=document.elementFromPoint(up.clientX,up.clientY)?.closest?.('.piano-cell[data-track][data-pitch][data-step]');let end=origin;if(el&&+el.dataset.track===i&&+el.dataset.pitch===pitch)end=+el.dataset.step;checkpoint(existing?'Edit note':'Add note');if(existing){if(end===origin)removeNote(tr,existing);else existing.length=clamp(end-existing.start+1,1,STEPS-existing.start)}else{const start=Math.min(origin,end),length=Math.abs(end-origin)+1;addNote(tr,pitch,start,length,2,1,0)}renderAll()};document.addEventListener('pointerup',finish,{once:true})}
+function buildNoteTools(tr,i){
+  const box=document.createElement('div');box.className='note-tools';
+  const scaleName=escHtml($('#scale').value),keyName=escHtml($('#key').value);
+  box.innerHTML='<span class="nt-label">Chord ('+keyName+' '+scaleName+')</span>'
+    +'<div class="nt-row" data-chords>'+Object.keys(CHORD_SHAPES).map(s=>'<button data-chord="'+s+'" class="'+(s===chordShape?'on':'')+'">'+s+'</button>').join('')+'</div>'
+    +'<span class="nt-label">Add chord at step '+String(selectedStep+1).padStart(2,'0')+'</span>'
+    +'<div class="nt-row"><button data-act="addchord">Add '+escHtml(chordShape)+' chord</button><button data-act="snap">Snap all to scale</button></div>'
+    +'<span class="nt-label">Next note ideas</span><div class="suggest" data-suggest></div>'
+    +'<label class="autosnap"><input type="checkbox" data-autosnap '+(autoSnap?'checked':'')+'>Keep notes in scale</label>';
+  const sug=box.querySelector('[data-suggest]');
+  const cand=suggestPitches(tr);
+  sug.innerHTML=cand.length?cand.map(p=>'<button data-pitch="'+p+'" title="Add '+noteName(p)+' at step '+(selectedStep+1)+'">'+noteName(p)+'</button>').join(''):'<span class="small">No ideas yet</span>';
+  box.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    if(b.dataset.chord){chordShape=b.dataset.chord;renderAll();return}
+    if(b.dataset.pitch!=null){if(tr.locked)return toast('Track is locked');checkpoint('Add note');addNote(tr,clamp(+b.dataset.pitch,24,108),selectedStep,1,2,1,0);renderAll();return}
+    if(b.dataset.act==='addchord'){addChordAt(tr,selectedStep,chordShape,tr.role==='bass'?36:60);return}
+    if(b.dataset.act==='snap'){snapTrackToScale(tr);return}
+  });
+  box.querySelector('[data-autosnap]').addEventListener('change',e=>{autoSnap=e.target.checked;toast(autoSnap?'Keeping notes in scale':'Free notes')});
+  return box;
+}
+function beginNoteGesture(e,i,pitch,step){if(e.button!==0)return;const tr=tracks()[i];if(tr.locked){toast('Track is locked');return}e.preventDefault();selectedTrack=i;selectedStep=step;if(autoSnap)pitch=snapToScale(pitch);const existing=noteCovering(tr,pitch,step),origin=step;const finish=up=>{document.removeEventListener('pointerup',finish);const el=document.elementFromPoint(up.clientX,up.clientY)?.closest?.('.piano-cell[data-track][data-pitch][data-step]');let end=origin;if(el&&+el.dataset.track===i&&+el.dataset.pitch===pitch)end=+el.dataset.step;checkpoint(existing?'Edit note':'Add note');if(existing){if(end===origin)removeNote(tr,existing);else existing.length=clamp(end-existing.start+1,1,STEPS-existing.start)}else{const start=Math.min(origin,end),length=Math.abs(end-origin)+1;addNote(tr,pitch,start,length,2,1,0)}renderAll()};document.addEventListener('pointerup',finish,{once:true})}
 
 function renderSeq(){
   const root=$('#seq');root.innerHTML='';const head=document.createElement('div');head.className='seq-head';head.innerHTML='<div>SOUND</div>'+Array.from({length:16},(_,i)=>'<div class="step-index" data-step="'+i+'" style="text-align:center">'+(i+1)+'</div>').join('');root.appendChild(head);
