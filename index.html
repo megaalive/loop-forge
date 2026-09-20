@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.7.4 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.7.5 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.7.4 — review fixes ===== */
+/* ===== LOOPFORGE-16 v4.7.5 — review fixes ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -512,7 +512,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.7.4', STEPS=16, TRACKS=16;
+const APP_VERSION='4.7.5', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -530,7 +530,7 @@ let iosAudioBridge=null, iosAudioBridgeUrl=null;
 const noiseBufferCache=new WeakMap();
 let trackBuses=Array(TRACKS).fill(null), previewSource=null, previewTrackIndex=-1;
 let renderMaster=null, renderBuses=null;
-let analyser=null, vizCtx=null, meterRAF=null, lastMeter=0, previewSynthTimer=null;
+let analyser=null, vizCtx=null, meterRAF=null, lastMeter=0, previewSynthTimer=null, previewAnalyser=null, auditionTrack=-1, auditionTap=null;
 let echoSend=null, echoDelay=null, echoFb=null, echoWet=null, sidechain=false;
 const visualTimers=new Set();
 const LS_KEY='loopforge16-v4', LS_MODE='loopforge-mode';
@@ -686,7 +686,13 @@ function drawViz(){
 function updateMixerMeters(reset){
   const panel=$('#mixer');if(!panel||panel.style.display==='none')return;
   const rows=$('#mixerBody').children;
-  for(let i=0;i<rows.length;i++){const el=rows[i].querySelector('.vmeter');if(!el)continue;if(reset){el.style.width='0%';continue}const bus=trackBuses[i];el.style.width=Math.round(peakOf(bus&&bus.analyser)*100)+'%'}
+  for(let i=0;i<rows.length;i++){const el=rows[i].querySelector('.vmeter');if(!el)continue;if(reset){el.style.width='0%';continue}const bus=trackBuses[i],live=(i===auditionTrack&&previewAnalyser)?previewAnalyser:(bus&&bus.analyser);el.style.width=Math.round(peakOf(live)*100)+'%'}
+}
+function previewAnalyserFor(trackIndex){
+  if(!ctx)return null;
+  if(!previewAnalyser){previewAnalyser=ctx.createAnalyser();previewAnalyser.fftSize=32}
+  auditionTrack=trackIndex;
+  return previewAnalyser
 }
 function stopMeters(){if(meterRAF){cancelAnimationFrame(meterRAF);meterRAF=null}if(vizCtx)vizCtx.clearRect(0,0,180,16);updateMixerMeters(true)}
 function startMeters(){
@@ -774,7 +780,9 @@ function outChain(ac,tr,when,vel,trackIndex=-1){
   }
   const pan=ac.createStereoPanner?ac.createStereoPanner():ac.createGain();
   gain.gain.setValueAtTime(Math.max(.0001,vel*tr.volume),when);
-  if(pan.pan)pan.pan.setValueAtTime(tr.pan,when);gain.connect(pan);pan.connect(dest||ac.destination);return gain
+  if(pan.pan)pan.pan.setValueAtTime(tr.pan,when);gain.connect(pan);pan.connect(dest||ac.destination);
+  if(live&&auditionTap){try{pan.connect(auditionTap)}catch(_){}}
+  return gain
 }
 function syncPreviewButton(){
   const b=$('#previewSound');if(!b)return;
@@ -796,9 +804,10 @@ function previewSampleTrack(trackIndex,slice=null){
   src.buffer=buf;src.playbackRate.value=Math.pow(2,tr.tune/12);
   gain.gain.value=Math.max(.0001,.9*tr.volume);
   if(pan.pan)pan.pan.value=tr.pan;
-  src.connect(gain);gain.connect(pan);pan.connect(master);
+  const an=previewAnalyserFor(trackIndex);
+  src.connect(gain);gain.connect(pan);pan.connect(master);if(an)pan.connect(an);
   previewSource=src;previewTrackIndex=trackIndex;syncPreviewButton();startMeters();
-  src.onended=()=>{if(previewSource===src){previewSource=null;previewTrackIndex=-1;syncPreviewButton();if(!isPlaying)stopMeters()}};
+  src.onended=()=>{if(previewSource===src){previewSource=null;previewTrackIndex=-1;auditionTrack=-1;syncPreviewButton();if(!isPlaying)stopMeters()}};
   const when=ctx.currentTime+.015;
   if(slice==null)src.start(when);
   else{const dur=buf.duration/16,off=clamp(slice,0,15)*dur;src.start(when,off,dur)}
@@ -1309,11 +1318,14 @@ async function init(){
       return
     }
     syncTrackBuses();
+    previewAnalyserFor(selectedTrack);
     startMeters();
     const dur=Math.max(.35,tr.attack+tr.decay+tr.release+.2);
     clearTimeout(previewSynthTimer);
-    previewSynthTimer=setTimeout(()=>{if(!isPlaying&&!previewSource)stopMeters()},dur*1000+80);
-    hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)
+    previewSynthTimer=setTimeout(()=>{if(!isPlaying&&!previewSource){auditionTrack=-1;stopMeters()}},dur*1000+80);
+    auditionTap=previewAnalyser;
+    try{hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)}
+    finally{auditionTap=null}
   };$('#sampleFile').onchange=e=>e.target.files[0]&&loadSample(e.target.files[0]);$('#wave').onclick=e=>{if(!sampleBuffers[selectedTrack])return;const rect=e.currentTarget.getBoundingClientRect();const s=clamp(Math.floor((e.clientX-rect.left)/rect.width*16),0,15);selectedStepObjAssignSlice(s,true)};
   $('#exportWavBtn').onclick=()=>exportWav().catch(e=>{console.error(e);toast('WAV export failed: '+e.message)});$('#stemWavBtn').onclick=()=>exportStem().catch(e=>{console.error(e);toast('Stem export failed: '+e.message)});
   $$('.patternbtn').forEach(b=>b.onclick=()=>switchPattern(b.dataset.pattern));$('#copyPattern').onclick=()=>{checkpoint('Copy pattern');const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];state.patterns[n]=cloneData(state.patterns[currentPattern]);switchPattern(n);toast(`Copied to pattern ${n}`)};

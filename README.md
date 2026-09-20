@@ -74,6 +74,10 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 - **Visualizer pada synth audition**: **Hear this sound** pada track synth kini menyalakan oscilloscope/VU seperti sample preview, lalu menghentikannya setelah nada selesai (berdasarkan attack+decay+release), kecuali sedang playing atau ada preview yang lebih baru.
 
+## Perbaikan 4.7.5
+
+- **VU per-track ikut audition**: preview sample maupun synth dulu menembus track bus (agar bisa melewati Solo), jadi VU track tidak bergerak. Sekarang audition memakai analyser preview tersendiri dan hasilnya ditampilkan pada meter track yang sedang diaudition, tanpa mengembalikan routing preview ke track bus. Playback normal tetap membaca analyser track bus seperti sebelumnya.
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -90,4 +94,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.7.4**.
+Versi saat ini: **4.7.5**.
