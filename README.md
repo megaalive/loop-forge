@@ -103,6 +103,14 @@ Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia 
 - **Lock selalu menang**; `preserve` dihormati.
 - **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
 
+### Perbaikan 4.9.3 (mesin blend variation)
+
+- **Baseline kosong tidak lagi jadi saklar ON/OFF.** Dulu pitched track tanpa note langsung melompat ke kandidat penuh begitu `variation > 0`. Sekarang material kandidat masuk satu per satu sesuai ambang `variation`, jadi `0 → 0.1 → 0.3 → 1.0` benar-benar bertahap.
+- **Monotonic benar-benar dijamin.** Tiap event/step punya *rank* deterministik yang tidak bergantung pada `variation`; slider hanya menaikkan ambang. Naikkan nilai = tambah perubahan, tidak pernah mengocok ulang pilihan lama. Seed kandidat juga tidak lagi memuat `variation`.
+- **Invariant note tidak dilanggar.** Blend memakai semantik tumpang-tindih interval yang sama dengan `addNote()`: dua note dengan pitch sama tidak boleh saling menimpa waktu (kasus `C4@0 len4` vs `C4@2 len4` kini aman).
+- **Stale fingerprint pakai part aktif utuh** (`JSON.stringify(state.patterns[currentPattern])`), jadi perubahan parameter suara apa pun di part aktif ikut terdeteksi, sementara edit part lain tetap tidak membuat stale.
+- **Prompt sistem disamakan** dengan vocabulary validator: menyebut token grup `drums`, `bass`, `harmony`, `melodic`, `texture_fx`, `all`.
+
 ### Perbaikan 4.9.2 (semantik variation & preserve)
 
 - **`variation` kini relatif ke pola yang sedang ada.** Sebelumnya executor menulis ulang track lalu memutasinya, jadi `variation 0%` bisa mengganti seluruh bass. Sekarang track saat ini menjadi **baseline**: kandidat dibuat terpisah, lalu `variation` menentukan berapa banyak kandidat menggantikan baseline (0% = baseline dipertahankan, 100% = kandidat dipakai penuh). "Buat bass lebih gelap tapi tetap mirip" sekarang benar-benar berarti demikian.
@@ -136,4 +144,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.9.2**.
+Versi saat ini: **4.9.3**.

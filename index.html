@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.9.2 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.9.3 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.9.2 — AI variation semantics ===== */
+/* ===== LOOPFORGE-16 v4.9.3 — blend engine ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -547,7 +547,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.9.2', STEPS=16, TRACKS=16;
+const APP_VERSION='4.9.3', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1350,8 +1350,9 @@ function aiSystemPrompt(){
   return 'You translate a musician\'s plain-language request into strict JSON parameters. '
     +'You never write notes or rhythms yourself. Reply with ONE JSON object and nothing else.\n'
     +'Schema: {"action":"reshape","target":"drums|bass|harmony|melody","style":"<one of: '+AI_STYLES.join('|')+'">,'
-    +'"density":0..1,"syncopation":0..1,"humanizeMs":0..40,"variation":0..1,"preserve":["kick"|"snare"|"hat"|"perc"|"bass"|"chord"|"melody"|"arp"|"texture"|"fx"|"sample"]}\n'
-    +'No extra keys. density = how busy, syncopation = off-beat push, variation = how far from the current pattern, preserve = roles the user asked to keep.'
+    +'"density":0..1,"syncopation":0..1,"humanizeMs":0..40,"variation":0..1,"preserve":[<roles: '+AI_ROLES.join('|')+'> or <groups: '+AI_GROUP_TOKENS.join('|')+'>]}\n'
+    +'No extra keys. density = how busy, syncopation = off-beat push, variation = how far from the current pattern (0 keeps it almost identical, 1 rewrites it), preserve = roles/groups the user asked to keep. '
+    +'Group tokens: drums=kick+snare+hat+perc, bass=bass, harmony=chord, melodic=melody+arp, texture_fx=texture+fx, all=every role.'
 }
 function aiStateSummary(){
   const ts=tracks(),anySolo=ts.some(t=>t.solo);
@@ -1429,7 +1430,10 @@ function localExecutorApply(p){
   if(!ids.length)return {applied:0,reason:'No writable target (locked or all preserved)'};
   checkpoint('AI reshape');
   const intent=aiDecisionToIntent(d),ts=tracks(),v=clamp01(d.variation);
-  const candSeed=hash32(JSON.stringify(d)+'|'+currentPattern);
+  // Candidate must be identical for a given decision EXCEPT variation — otherwise the
+  // blend re-rolls and Similar→Wild stops being monotonic. Exclude variation from the seed.
+  const seedBasis={action:d.action,target:d.target,style:d.style,density:d.density,syncopation:d.syncopation,humanizeMs:d.humanizeMs,preserve:d.preserve};
+  const candSeed=hash32(JSON.stringify(seedBasis)+'|'+currentPattern);
   ids.forEach(i=>{
     const baseline=cloneData(ts[i]);           // current pattern = baseline
     applySoundFromIntent(baseline,intent);
@@ -1444,28 +1448,47 @@ function localExecutorApply(p){
   markForge(onKeys());renderAll();
   return {applied:ids.length}
 }
-// Blend baseline and candidate: at v=0 keep baseline notes; at v=1 take candidate.
-// Fraction f of baseline note/step positions is replaced by candidate material.
+// Deterministic per-item rank in [0,1), independent of `variation`.
+// Same item id + same track seed => same rank, so growing `variation` only ever
+// ADDS changes (monotonic superset), never re-rolls earlier choices.
+function blendRank(trackSeed,itemKey){
+  return (hash32(trackSeed+'\u0000'+itemKey)>>>0)/4294967296
+}
+// True if candidate note C would overlap a note N of the SAME pitch (interval overlap,
+// consistent with the addNote() invariant: same pitch may not overlap in time).
+function samePitchOverlap(a,b){
+  if(a.pitch!==b.pitch)return false;
+  const aEnd=a.start+a.length,bEnd=b.start+b.length;
+  return a.start<bEnd&&b.start<aEnd
+}
+// Blend baseline and candidate. variation 0 => baseline untouched, 1 => candidate fully.
+// For pitched tracks the candidate notes are admitted one-by-one by rank, and any note
+// that would overlap a kept/added same-pitch note is skipped (invariant preserved).
 function mixBaselineCandidate(baseline,cand,v,i){
   const out=cloneData(baseline);
   const f=clamp01(v);
-  if(isPitchedTrack(baseline)){
+  const trackSeed='mix|'+i+'|'+currentPattern;
+  if(isPitchedTrack(baseline)||isPitchedTrack(cand)){
     const base=noteEvents(baseline),candN=noteEvents(cand);
-    if(!base.length){return f>0?cloneData(cand):out}
-    if(f<=0){out.noteEvents=cloneData(base);return out}
-    // keep each baseline note with prob (1-f); add candidate notes where they don't overlap kept ones
-    const rng=seeded(hash32('mix'+i+JSON.stringify(base.length)+JSON.stringify(candN.length)+Math.round(f*1000)));
-    const kept=base.filter(()=>rng()>=f);
-    const keptSet=new Set(kept.map(n=>n.pitch+'@'+n.start));
-    const added=candN.filter(n=>rng()<f && !keptSet.has(n.pitch+'@'+n.start));
-    out.noteEvents=kept.concat(added).map(cloneData);
-    if(!out.noteEvents.length)out.noteEvents=base.slice(0,1).map(cloneData)
-  } else {
-    const rng=seeded(hash32('mix'+i+JSON.stringify(baseline.steps)+JSON.stringify(cand.steps)+Math.round(f*1000)));
-    for(let k=0;k<STEPS;k++){
-      if(rng()<f)out.steps[k]=cloneData(cand.steps[k])
-    }
+    if(f<=0){out.noteEvents=base.map(cloneData);return out}
+    // baseline notes are dropped only if their own rank was admitted by the candidate side
+    const kept=base.filter(n=>blendRank(trackSeed,'b|'+n.pitch+'|'+n.start+'|'+n.length)>=f);
+    const chosen=kept.map(cloneData);
+    // candidate notes admitted by rank, in deterministic order, skipping overlaps
+    const ordered=[...candN].sort((a,b)=>(a.start-b.start)||(a.pitch-b.pitch));
+    ordered.forEach(n=>{
+      if(blendRank(trackSeed,'c|'+n.pitch+'|'+n.start+'|'+n.length)>=f)return;
+      if(chosen.some(k=>samePitchOverlap(k,n)))return;
+      chosen.push(cloneData(n))
+    });
+    chosen.sort((a,b)=>(a.start-b.start)||(a.pitch-b.pitch));
+    out.noteEvents=chosen;out.type=cand.type
+    return out
   }
+  for(let k=0;k<STEPS;k++){
+    if(blendRank(trackSeed,'s|'+k)<f)out.steps[k]=cloneData(cand.steps[k])
+  }
+  out.type=cand.type;
   return out
 }
 // role-aware humanize used by the AI executor (mirrors humanizeTrack but index-based)
@@ -1490,9 +1513,10 @@ function invalidateAiRequests(){aiRequestId++;if(aiAbort){try{aiAbort.abort()}ca
 // and per-track role/lock (executor targets by role). Edits to INACTIVE parts do not
 // invalidate the proposal — only the part being changed does.
 function activePartFingerprint(){
-  // role/lock/type drive target selection; steps/noteEvents drive the baseline
-  // that variation is measured against. All of that belongs to the active part.
-  return JSON.stringify(state.patterns[currentPattern].map(tr=>({role:tr.role,locked:tr.locked,type:tr.type,steps:tr.steps,noteEvents:tr.noteEvents})))
+  // Executor reads many track fields (role/lock/type + sound params) and uses the
+  // whole active pattern as baseline. Serialize the active part in full — edits to
+  // OTHER parts still do not make a proposal stale.
+  return JSON.stringify(state.patterns[currentPattern])
 }
 function aiContextSnapshot(){
   return {pattern:currentPattern,key:$('#key').value,scale:$('#scale').value,part:activePartFingerprint()}
