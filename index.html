@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.7.5 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.7.6 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.7.5 — review fixes ===== */
+/* ===== LOOPFORGE-16 v4.7.6 — review fixes ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -512,7 +512,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.7.5', STEPS=16, TRACKS=16;
+const APP_VERSION='4.7.6', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -671,6 +671,7 @@ function createAudioContext(){
   master.connect(echoSend);echoSend.connect(echoDelay);echoDelay.connect(echoFb);echoFb.connect(echoDelay);echoDelay.connect(echoWet);echoWet.connect(ctx.destination);
   const vc=$('#viz');if(vc)vizCtx=vc.getContext('2d');
   trackBuses=Array(TRACKS).fill(null);
+  previewAnalyser=null;auditionTrack=-1;auditionTap=null;
   if('onstatechange' in ctx)ctx.onstatechange=updateAudioStatus;
   updateAudioStatus();
   return ctx
@@ -790,7 +791,7 @@ function syncPreviewButton(){
   b.classList.toggle('danger',!!previewSource)
 }
 function stopSoundPreview(update=true){
-  const src=previewSource;previewSource=null;previewTrackIndex=-1;
+  const src=previewSource;previewSource=null;previewTrackIndex=-1;auditionTrack=-1;
   if(src){try{src.onended=null;src.stop()}catch(_){ }try{src.disconnect()}catch(_){}}
   if(!isPlaying)stopMeters();
   if(update)syncPreviewButton()
@@ -1320,9 +1321,12 @@ async function init(){
     syncTrackBuses();
     previewAnalyserFor(selectedTrack);
     startMeters();
-    const dur=Math.max(.35,tr.attack+tr.decay+tr.release+.2);
+    const dur=Math.max(.35,tr.attack+tr.decay+tr.release+.2),auditionIdx=selectedTrack;
     clearTimeout(previewSynthTimer);
-    previewSynthTimer=setTimeout(()=>{if(!isPlaying&&!previewSource){auditionTrack=-1;stopMeters()}},dur*1000+80);
+    previewSynthTimer=setTimeout(()=>{
+      if(auditionTrack===auditionIdx&&!previewSource)auditionTrack=-1;
+      if(!isPlaying&&!previewSource)stopMeters()
+    },dur*1000+80);
     auditionTap=previewAnalyser;
     try{hit(ctx,tr,ctx.currentTime+.02,.9,tr.note,null,currentStepObj().slice||0,selectedTrack,tracks(),true)}
     finally{auditionTap=null}

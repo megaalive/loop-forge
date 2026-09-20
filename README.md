@@ -78,6 +78,11 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 - **VU per-track ikut audition**: preview sample maupun synth dulu menembus track bus (agar bisa melewati Solo), jadi VU track tidak bergerak. Sekarang audition memakai analyser preview tersendiri dan hasilnya ditampilkan pada meter track yang sedang diaudition, tanpa mengembalikan routing preview ke track bus. Playback normal tetap membaca analyser track bus seperti sebelumnya.
 
+## Perbaikan 4.7.6
+
+- **Lifecycle audition bersih**: pemilihan meter preview (`auditionTrack`) kini selalu dilepas saat audition selesai — termasuk **Stop sound** manual pada sample dan saat timer synth berakhir di tengah playback. Timer juga dijaga oleh index track agar timer lama tidak menghapus audition yang lebih baru. Penghentian meter RAF tetap terpisah: hanya berhenti bila tidak ada playback atau preview lain.
+- **Analyser tidak basi antar context**: `createAudioContext()` mengatur ulang `previewAnalyser`, `auditionTrack`, dan `auditionTap`, sehingga analyser dari AudioContext lama tidak pernah dipakai pada graph context baru.
+
 ## Menjalankan
 
 Tidak perlu instalasi.
@@ -94,4 +99,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.7.5**.
+Versi saat ini: **4.7.6**.
