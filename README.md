@@ -34,6 +34,16 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 ## Riwayat perubahan (terbaru dulu)
 
+### Baru di 4.11.0 (Generator dialog)
+
+- **Satu entry point**: tombol **Generate** di topbar (menggantikan "New part"). Tombol **Blank loop** tetap.
+- **Generator jadi satu dialog/modal** (responsif, mobile-friendly) dengan **dua engine**: **Native** (default, jalan tanpa network/key) dan **LLM**. Keduanya adalah engine dari konsep yang sama, bukan subsystem terpisah.
+- **Tab "Idea" di sidebar dihapus.** Sidebar kini hanya Sound / Step(advanced) / Mix / Save.
+- **Kontrol dipusatkan di dialog**: What do you want? (satu textarea bersama), Target/scope (current part atau A–D + target role), Feel (Style, Density, Key, Scale, Similar/Wild), Action (New idea / Variation / Fill gaps), serta primary **Generate current** dan **Generate A–D**. Rhythm tools (Euclid/Humanize) pindah ke collapsible **More controls**.
+- **LLM config bersih**: saat Engine=Native seluruh noise API/key disembunyikan; saat Engine=LLM muncul **LLM connection** (profile, name, endpoint, model, key, remember, test, forget) sebagai collapsible inline — bukan modal bersarang.
+- **Arsitektur**: Native (`controls`/`parseIntent`) dan LLM (`prompt → provider → extractJson → AIValidator → AISemanticValidate`) sama-sama menghasilkan **GeneratorDecision** lalu lewat **LocalExecutor** yang sama. Tidak ada executor duplikat.
+- **Backward compatible**: perilaku generator lokal, AI Mode 1, profile/security, schema project/share/export, dan transport/audio tidak berubah. Membuka dialog tidak mengubah project; satu Generate = satu checkpoint/Undo. Dialog bisa ditutup via Escape, tombol ×, dan backdrop.
+
 ### Perbaikan 4.10.1 (semantik preserve Mode 1)
 
 - **Token preserve `all` dihapus.** Karena `target` di Mode 1 selalu wajib, `preserve:["all"]` selalu bertentangan dengan target dan tidak punya penggunaan sehat; sekarang ditolak sebagai token tak dikenal.
@@ -185,4 +195,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.10.1**.
+Versi saat ini: **4.11.0**.

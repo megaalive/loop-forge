@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.10.1 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.11.0 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.10.1 — preserve semantics ===== */
+/* ===== LOOPFORGE-16 v4.11.0 — generator dialog ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -283,6 +283,32 @@ details.morebox>.inside{padding:0 9px 9px}
 kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text);background:var(--surface-3);font:10px var(--mono)}
 .toast{position:fixed;right:14px;bottom:14px;z-index:99;background:var(--surface-3);border:1px solid var(--border-strong);border-radius:var(--radius);padding:9px 12px;max-width:320px;box-shadow:var(--shadow);display:none;font-size:12px;font-weight:600}
 
+/* ---------- generator dialog ---------- */
+.genmodal{position:fixed;inset:0;z-index:130;display:none;background:rgba(4,5,7,.66);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.genmodal.open{display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
+.genmodal-card{width:min(720px,100%);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden}
+.genmodal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border-soft);background:var(--surface-2)}
+.genmodal-head b{font-size:14px}
+.genmodal-head .x{border:0;background:transparent;color:var(--text-dim);font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+.genmodal-body{padding:14px;overflow:auto}
+.genmodal-foot{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--border-soft);background:var(--surface-2);flex-wrap:wrap}
+.gen-seg{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+.gen-seg button{flex:1;border:0;background:var(--surface-2);color:var(--text-dim);padding:9px;font-weight:700;cursor:pointer}
+.gen-seg button.on{background:var(--accent);color:var(--accent-ink)}
+.gen-seg button+button{border-left:1px solid var(--border)}
+.gen-sec{border-top:1px solid var(--border-soft);margin-top:12px;padding-top:12px}
+.gen-sec:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.gen-h{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--text-faint);text-transform:uppercase;margin-bottom:7px}
+.gen-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.gen-actions.three{grid-template-columns:repeat(3,1fr)}
+.gen-hint{font-size:10.5px;color:var(--text-dim);margin-top:6px;line-height:1.5}
+@media (max-width:520px){
+  .genmodal.open{padding:0}
+  .genmodal-card{max-height:100dvh;border-radius:0;width:100%}
+  .gen-hint{font-size:11px}
+  .gen-actions,.gen-actions.three{grid-template-columns:1fr 1fr}
+}
+
 /* ---------- step popover ---------- */
 .popover{position:fixed;z-index:120;width:240px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;font-size:12px}
 .pop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;color:var(--text);font-weight:700}
@@ -355,7 +381,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
       <div class="field"><span class="hide-sm">SWING</span><input id="swing" type="range" min="0" max="70" value="18"><span id="swingVal">18%</span></div>
       <div class="field advanced-only" title="Master echo send"><span>ECHO</span><input id="echo" type="range" min="0" max="100" value="0"><span id="echoVal">0%</span></div>
       <button id="scBtn" class="btn advanced-only" title="Sidechain: kick ducks the bass">Duck</button>
-      <button id="randomBtn" class="btn" title="Generate only the part you are viewing">New part</button>
+      <button id="generateBtn" class="btn primary" title="Open the generator">Generate</button>
       <button id="blankBtn" class="btn" title="Clear the current part and start empty">Blank loop</button>
       <button id="typingBtn" class="btn advanced-only">Keys</button>
       <button id="audioBtn" class="btn" style="display:none">Enable audio</button>
@@ -372,7 +398,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
   <main class="main">
     <section class="workspace">
       <div id="welcome" class="welcome">
-        <div><strong>Make something in three moves.</strong><div class="welcome-steps"><span>Tap squares</span><span>Press Play</span><span>Try New part or Make A–D</span></div></div>
+        <div><strong>Make something in three moves.</strong><div class="welcome-steps"><span>Tap squares</span><span>Press Play</span><span>Or hit Generate for a full idea</span></div></div>
         <button id="hideWelcome" class="btn">Got it</button>
       </div>
       <div class="modehint"><b>Tip:</b> each row is one sound. Bright squares will play.</div>
@@ -396,75 +422,11 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 
     <aside class="sidebar">
       <div class="tabs">
-        <button class="btn tab active" data-show="generator">Idea</button>
-        <button class="btn tab" data-show="sound">Sound</button>
+        <button class="btn tab active" data-show="sound">Sound</button>
         <button class="btn tab advanced-only" data-show="stepedit">Step</button>
         <button class="btn tab" data-show="mixer">Mix</button>
         <button class="btn tab" data-show="project">Save</button>
       </div>
-
-      <section class="panel sidepanel" id="generator">
-        <h3>MAKE AN IDEA</h3><div class="body">
-          <div class="quick-card">
-            <h4>Pick a feel</h4>
-            <div class="row">
-              <label class="control">Style<select id="genre"><option>Techno</option><option>House</option><option>Dark Ambient</option><option>Breakbeat</option><option>Trap</option><option>Funk</option><option>Jaipongan-ish</option><option>Minimal</option></select></label>
-              <label class="control">Busy ↔ simple<input id="density" type="range" min="10" max="90" value="50"></label>
-            </div>
-            <div class="row">
-              <label class="control">Key<select id="key"></select></label>
-              <label class="control">Mood<select id="scale"><option>Minor</option><option>Major</option><option>Dorian</option><option>Phrygian</option><option>Pentatonic</option></select></label>
-            </div>
-            <div class="grid2">
-              <button id="generateIdea" class="btn primary big-action">Make this part</button>
-              <button id="generateAll" class="btn big-action">Make A–D</button>
-            </div>
-          </div>
-          <details class="morebox advanced-only"><summary>Shape it with words</summary><div class="inside">
-            <div class="genbox" style="border:0;padding:0;background:transparent">
-              <label class="control">Describe the change<textarea id="genPrompt" rows="3" placeholder="dark sparse bass; keep the drums"></textarea></label>
-              <div class="chips" id="promptChips"><button data-w="dark">dark</button><button data-w="driving">driving</button><button data-w="sparse">sparse</button><button data-w="busy">busy</button><button data-w="soft">soft</button><button data-w="hard">hard</button><button data-w="syncopated">syncopated</button><button data-w="jaipong">jaipong</button><button data-w="keep drums">keep drums</button><button data-w="keep bass">keep bass</button></div>
-              <div class="row" style="margin-top:8px"><label class="control">Change<select id="genTarget"><option value="selected">Selected track</option><option value="drums">Drums</option><option value="bass">Bass</option><option value="harmony">Harmony</option><option value="melody">Melody / arp</option><option value="texture">Texture / FX</option><option value="full">All unlocked tracks</option></select></label><label class="control">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label></div>
-              <div class="grid2"><button id="genApply" class="btn primary">Generate</button><button id="genFill" class="btn">Fill gaps</button></div>
-              <label class="control" style="margin-top:8px">Similar ↔ Wild <span id="variVal">40%</span><input id="variAmount" type="range" min="0" max="100" value="40"></label>
-              <div class="grid2"><button id="genVariation" class="btn primary">Variation → next</button><button id="genSong" class="btn">Regenerate A–D</button></div>
-              <div id="genResult" class="genresult">Changes stay editable. Locked tracks stay untouched.</div>
-            </div>
-          </div></details>
-          <details class="morebox advanced-only"><summary>Rhythm tools</summary><div class="inside">
-            <div class="row"><label class="control">Pulses<input id="euclidPulses" type="number" min="0" max="16" value="5"></label><label class="control">Steps<input id="euclidSteps" type="number" min="1" max="16" value="16"></label></div>
-            <div class="row"><label class="control">Rotate<input id="euclidRotate" type="number" min="-15" max="15" value="0"></label><label class="control">Humanize ms<input id="humanizeMs" type="number" min="0" max="80" value="12"></label></div>
-            <div class="grid2"><button id="applyEuclid" class="btn">Apply rhythm</button><button id="humanizeTrack" class="btn">Humanize</button></div>
-          </div></details>
-          <details class="morebox advanced-only" id="aiBox"><summary>AI — describe it, code decides</summary><div class="inside">
-            <p class="small">Bring your own key. It stays in this browser only and is sent <b>directly to the endpoint you configure</b> — never through any LOOPFORGE server. This is a personal-use convenience, not secure storage: any code on this origin, a browser extension, or device access could read it. A custom endpoint is a trust boundary — your key goes to whatever URL you set here.</p>
-            <label class="control">Connection<select id="aiProfile"></select></label>
-            <div class="grid2" style="margin-top:6px">
-              <button id="aiAddProfile" class="btn">New connection</button>
-              <button id="aiRemoveProfile" class="btn danger">Remove</button>
-            </div>
-            <label class="control" style="margin-top:6px">Connection name<input id="aiName" maxlength="32" placeholder="OpenAI"></label>
-            <label class="control" style="margin-top:6px">Chat endpoint (full URL)<input id="aiEndpoint" spellcheck="false" placeholder="https://api.openai.com/v1/chat/completions"></label>
-            <label class="control" style="margin-top:6px">Model<input id="aiModel" placeholder="gpt-4o-mini"></label>
-            <label class="control" style="margin-top:6px">API key<input id="aiKey" type="password" autocomplete="off" placeholder="sk-..."></label>
-            <div class="grid2" style="margin-top:6px">
-              <button id="aiTest" class="btn">Test connection</button>
-              <button id="aiForget" class="btn">Forget key</button>
-            </div>
-            <label class="autosnap" style="cursor:pointer"><input type="checkbox" id="aiRemember">Remember this key for this tab (sessionStorage)</label>
-            <p class="small" id="aiEndpointWarn" style="display:none"></p>
-            <label class="control" style="margin-top:8px">What do you want?<textarea id="aiPrompt" rows="2" placeholder="dark sparse bass, keep the drums"></textarea></label>
-            <div class="grid2" style="margin-top:6px"><button id="aiAsk" class="btn primary">Ask AI</button><button id="aiApply" class="btn" disabled>Apply proposal</button></div>
-            <div id="aiStatus" class="genresult">AI off. Add a key to let the model choose parameters; the local generator still writes the notes.</div>
-            <details class="morebox" id="aiPrivacy" style="margin-top:8px"><summary>Preview what is sent &amp; what is proposed</summary><div class="inside">
-              <div class="small" style="margin-bottom:4px"><b>Sent to provider</b></div>
-              <pre id="aiSent" class="aipre">—</pre>
-              <div class="small" style="margin:6px 0 4px"><b>Proposed locally</b></div>
-              <pre id="aiProposal" class="aipre">—</pre>
-            </div></details>
-          </div></details>
-        </div>
-      </section>
 
       <section class="panel sidepanel" id="sound" style="display:none">
         <h3>SOUND — <span id="selectedName">Track</span></h3><div class="body">
@@ -543,6 +505,120 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
     </aside>
   </main>
 
+  <div class="genmodal" id="genModal" role="dialog" aria-modal="true" aria-label="Generator">
+    <div class="genmodal-card">
+      <div class="genmodal-head">
+        <b>Generate</b>
+        <button class="x" id="genModalClose" aria-label="Close">×</button>
+      </div>
+      <div class="genmodal-body">
+
+        <div class="gen-seg" id="genEngine">
+          <button data-engine="native" class="on">Native</button>
+          <button data-engine="llm">LLM</button>
+        </div>
+
+        <div class="gen-sec">
+          <div class="gen-h">What do you want?</div>
+          <textarea id="genPrompt" rows="3" placeholder="dark sparse bass; keep the drums"></textarea>
+          <div class="chips" id="promptChips">
+            <button data-w="dark">dark</button><button data-w="driving">driving</button>
+            <button data-w="sparse">sparse</button><button data-w="busy">busy</button>
+            <button data-w="soft">soft</button><button data-w="hard">hard</button>
+            <button data-w="syncopated">syncopated</button><button data-w="jaipong">jaipong</button>
+            <button data-w="keep drums">keep drums</button><button data-w="keep bass">keep bass</button>
+          </div>
+          <div class="gen-hint">Native reads this text locally. Switch to LLM to let a model turn it into parameters.</div>
+        </div>
+
+        <div class="gen-sec">
+          <div class="gen-h">Target / scope</div>
+          <div class="row">
+            <label class="control">Part<select id="genScope">
+              <option value="current">Current part</option>
+              <option value="all">A–D (whole song)</option>
+            </select></label>
+            <label class="control">Change<select id="genTarget">
+              <option value="selected">Selected track</option>
+              <option value="drums">Drums</option>
+              <option value="bass">Bass</option>
+              <option value="harmony">Harmony</option>
+              <option value="melody">Melody / arp</option>
+              <option value="texture">Texture / FX</option>
+              <option value="full">All unlocked tracks</option>
+            </select></label>
+          </div>
+          <label class="control">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label>
+        </div>
+
+        <div class="gen-sec">
+          <div class="gen-h">Feel</div>
+          <div class="row">
+            <label class="control">Style<select id="genre"><option>Techno</option><option>House</option><option>Dark Ambient</option><option>Breakbeat</option><option>Trap</option><option>Funk</option><option>Jaipongan-ish</option><option>Minimal</option></select></label>
+            <label class="control">Busy ↔ simple<input id="density" type="range" min="10" max="90" value="50"></label>
+          </div>
+          <div class="row">
+            <label class="control">Key<select id="key"></select></label>
+            <label class="control">Mood<select id="scale"><option>Minor</option><option>Major</option><option>Dorian</option><option>Phrygian</option><option>Pentatonic</option></select></label>
+          </div>
+          <label class="control">Similar ↔ Wild <span id="variVal">40%</span><input id="variAmount" type="range" min="0" max="100" value="40"></label>
+        </div>
+
+        <div class="gen-sec">
+          <div class="gen-h">Action</div>
+          <div class="gen-actions three">
+            <button id="genActionNew" class="btn">New idea</button>
+            <button id="genActionVariation" class="btn">Variation</button>
+            <button id="genActionFill" class="btn">Fill gaps</button>
+          </div>
+          <div class="gen-hint">New idea replaces the target. Variation keeps it close. Fill gaps adds ghost notes.</div>
+        </div>
+
+        <details class="morebox" id="genMore"><summary>More controls (rhythm)</summary><div class="inside">
+          <div class="row"><label class="control">Pulses<input id="euclidPulses" type="number" min="0" max="16" value="5"></label><label class="control">Steps<input id="euclidSteps" type="number" min="1" max="16" value="16"></label></div>
+          <div class="row"><label class="control">Rotate<input id="euclidRotate" type="number" min="-15" max="15" value="0"></label><label class="control">Humanize ms<input id="humanizeMs" type="number" min="0" max="80" value="12"></label></div>
+          <div class="gen-actions">
+            <button id="applyEuclid" class="btn">Apply rhythm</button>
+            <button id="humanizeTrack" class="btn">Humanize</button>
+          </div>
+        </div></details>
+
+        <details class="morebox" id="aiBox"><summary>LLM connection</summary><div class="inside">
+          <p class="small">Bring your own key. It stays in this browser only and is sent <b>directly to the endpoint you configure</b> — never through any LOOPFORGE server. This is a personal-use convenience, not secure storage: any code on this origin, a browser extension, or device access could read it. A custom endpoint is a trust boundary — your key goes to whatever URL you set here.</p>
+          <label class="control">Connection<select id="aiProfile"></select></label>
+          <div class="gen-actions" style="margin-top:6px">
+            <button id="aiAddProfile" class="btn">New connection</button>
+            <button id="aiRemoveProfile" class="btn danger">Remove</button>
+          </div>
+          <label class="control" style="margin-top:6px">Connection name<input id="aiName" maxlength="32" placeholder="OpenAI"></label>
+          <label class="control" style="margin-top:6px">Chat endpoint (full URL)<input id="aiEndpoint" spellcheck="false" placeholder="https://api.openai.com/v1/chat/completions"></label>
+          <label class="control" style="margin-top:6px">Model<input id="aiModel" placeholder="gpt-4o-mini"></label>
+          <label class="control" style="margin-top:6px">API key<input id="aiKey" type="password" autocomplete="off" placeholder="sk-..."></label>
+          <div class="gen-actions" style="margin-top:6px">
+            <button id="aiTest" class="btn">Test connection</button>
+            <button id="aiForget" class="btn">Forget key</button>
+          </div>
+          <label class="autosnap" style="cursor:pointer"><input type="checkbox" id="aiRemember">Remember this key for this tab (sessionStorage)</label>
+          <p class="small" id="aiEndpointWarn" style="display:none"></p>
+          <div class="gen-actions" style="margin-top:6px"><button id="aiAsk" class="btn primary">Ask LLM</button><button id="aiApply" class="btn" disabled>Apply proposal</button></div>
+          <div id="aiStatus" class="genresult">LLM off. Add a key to let the model choose parameters; the local generator still writes the notes.</div>
+          <details class="morebox" id="aiPrivacy" style="margin-top:8px"><summary>Preview what is sent &amp; what is proposed</summary><div class="inside">
+            <div class="small" style="margin-bottom:4px"><b>Sent to provider</b></div>
+            <pre id="aiSent" class="aipre">—</pre>
+            <div class="small" style="margin:6px 0 4px"><b>Proposed locally</b></div>
+            <pre id="aiProposal" class="aipre">—</pre>
+          </div></details>
+        </div></details>
+
+        <div id="genResult" class="genresult">Changes stay editable. Locked tracks stay untouched.</div>
+      </div>
+      <div class="genmodal-foot">
+        <button id="genRunPrimary" class="btn primary" style="flex:1">Generate current</button>
+        <button id="genRunAll" class="btn" style="flex:1">Generate A–D</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="footer">
     <span class="easy-help">Tap a square to turn a sound on or off.</span>
     <span class="advanced-only"><kbd>Space</kbd> play · drag to paint steps · Alt+drag for velocity · Shift+click cycles strength · right-click opens editor · <kbd>Ctrl+Z</kbd> undo</span>
@@ -555,7 +631,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.10.1', STEPS=16, TRACKS=16;
+const APP_VERSION='4.11.0', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1746,7 +1822,7 @@ async function aiTest(){
 async function aiAsk(){
   const profile=aiActiveProfile(),key=SecretStore.get(profile.id);
   if(!key)return toast('Add a key for this connection first');
-  const prompt=$('#aiPrompt').value.trim();if(!prompt)return toast('Describe what you want first');
+  const prompt=$('#genPrompt').value.trim();if(!prompt)return toast('Describe what you want first');
   setAiStatus('Asking '+profile.name+' for parameters…');
   aiProposal=null;$('#aiApply').disabled=true;
   const payload=aiBuildPayload(prompt,profile);
@@ -1829,6 +1905,66 @@ function bindAI(){
   };
   $('#aiTest').onclick=aiTest;$('#aiForget').onclick=aiForget;$('#aiAsk').onclick=aiAsk;$('#aiApply').onclick=aiApply;
   refreshAiUI()
+}
+
+/* =========================================================================
+   GENERATOR DIALOG — one concept, two engines (Native | LLM).
+   Both engines converge on a GeneratorDecision and the SAME LocalExecutor.
+   No duplicated executor: the dialog only chooses which producer runs.
+   ========================================================================= */
+let genEngine='native';
+function openGenerator(){
+  const m=$('#genModal');if(!m)return;
+  m.classList.add('open');
+  document.body.style.overflow='hidden';
+  // reflect current engine
+  setGenEngine(genEngine);
+}
+function closeGenerator(){
+  const m=$('#genModal');if(!m)return;
+  m.classList.remove('open');
+  document.body.style.overflow='';
+}
+function setGenEngine(engine){
+  genEngine=(engine==='llm')?'llm':'native';
+  const llm=genEngine==='llm';
+  $$('#genEngine button').forEach(b=>b.classList.toggle('on',b.dataset.engine===genEngine));
+  // Hide all LLM/API/security noise when Engine=Native.
+  const ai=document.getElementById('aiBox');if(ai)ai.style.display=llm?'':'none';
+  const primary=$('#genRunPrimary');
+  if(primary)primary.textContent=llm?'Ask LLM':'Generate current';
+  // Opening the dialog must never change the project — this only toggles visibility.
+}
+function runNativeGenerate(scope){
+  const prompt=$('#genPrompt').value.trim();
+  if(scope==='all'){generateAllParts();return}
+  if(prompt){runGen();return}                 // text present → local prompt generation
+  generateIdea();                             // no text → feel-based new part
+}
+
+/* ---------- dialog actions ---------- */
+function genAction(kind){
+  if(genEngine==='llm'){
+    if(kind==='new'||kind==='variation'){aiAsk();return}   // LLM produces a proposal, Apply applies
+    if(kind==='fill'){toast('Fill gaps is a Native action');return}
+  }
+  if(kind==='new'){runGen();return}
+  if(kind==='variation'){variationToNext();return}
+  if(kind==='fill'){fillGaps();return}
+}
+function bindGeneratorDialog(){
+  const m=$('#genModal');if(!m)return;
+  $('#generateBtn').onclick=openGenerator;
+  $('#genModalClose').onclick=closeGenerator;
+  m.addEventListener('pointerdown',e=>{if(e.target===m)closeGenerator()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&m.classList.contains('open'))closeGenerator()});
+  $$('#genEngine button').forEach(b=>b.onclick=()=>setGenEngine(b.dataset.engine));
+  $('#genRunPrimary').onclick=()=>{if(genEngine==='llm'){aiAsk();return}runNativeGenerate($('#genScope').value)};
+  $('#genRunAll').onclick=()=>{generateAllParts()};
+  $('#genActionNew').onclick=()=>genAction('new');
+  $('#genActionVariation').onclick=()=>genAction('variation');
+  $('#genActionFill').onclick=()=>genAction('fill');
+  setGenEngine('native')
 }
 
 function runGen(){const prompt=$('#genPrompt').value.trim(),target=$('#genTarget').value,seed=(+$('#genSeed').value||0)>>>0,intent=parseIntent(prompt),rng=seeded(seed^hash32(prompt+'|'+currentPattern+'|'+target));checkpoint('Generate');const ids=targetIndexes(target,intent.q);if(!ids.length)return toast('No writable target: locked or preserved by prompt');ids.forEach(i=>genRoleTrack(i,intent,rng,true));$('#genResult').textContent=describeIntent(intent,target)+` · changed ${ids.length} track(s) · locks/preserve respected`;markForge(onKeys());renderAll();toast('Generation applied')}
@@ -2026,7 +2162,7 @@ const typingMap={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:7
 
 async function init(){
   setMode(localStorage.getItem(LS_MODE)!=='advanced');
-  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';commitBpm($('#bpm').value);migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
+  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';commitBpm($('#bpm').value);migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();bindGeneratorDialog();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();updateAudioStatus();
   if(!navigator.requestMIDIAccess){$('#midiBtn').disabled=true;$('#midiBtn').textContent='MIDI n/a';$('#midiBtn').title='Web MIDI is not supported by this browser'}
   document.addEventListener('pointerdown',primeAudio,{once:true,passive:true});
   document.addEventListener('touchend',primeAudio,{once:true,passive:true});
@@ -2059,7 +2195,7 @@ async function init(){
   swingEl.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(e.key)&&!swingEl._g){swingEl._g=true;checkpoint('Swing')}});
   swingEl.addEventListener('keyup',()=>{swingEl._g=false});
   swingEl.addEventListener('blur',()=>{swingEl._g=false});
-  swingEl.oninput=e=>{$('#swingVal').textContent=e.target.value+'%';markDirty()};$('#echo').oninput=e=>{$('#echoVal').textContent=e.target.value+'%';setEcho(e.target.value/100);markDirty()};$('#scBtn').onclick=()=>{sidechain=!sidechain;$('#scBtn').classList.toggle('primary',sidechain);markDirty();toast(sidechain?'Sidechain on: kick ducks the bass':'Sidechain off')};$('#chain').addEventListener('input',markDirty);$('#key').addEventListener('change',markDirty);$('#scale').addEventListener('change',markDirty);$('#randomBtn').onclick=generateIdea;$('#blankBtn').onclick=blankLoop;$('#generateIdea').onclick=generateIdea;$('#generateAll').onclick=generateAllParts;$('#genApply').onclick=runGen;$('#genVariation').onclick=variationToNext;$('#variAmount').oninput=e=>{$('#variVal').textContent=e.target.value+'%';markDirty()};$('#variVal').textContent=$('#variAmount').value+'%';$('#genFill').onclick=fillGaps;$('#genSong').onclick=buildSong;$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;$('#promptChips').onclick=e=>{const b=e.target.closest('button');if(!b)return;e.preventDefault();const ta=$('#genPrompt');ta.value=(ta.value.trim()?ta.value.trim()+' ':'')+b.dataset.w;ta.focus()};
+  swingEl.oninput=e=>{$('#swingVal').textContent=e.target.value+'%';markDirty()};$('#echo').oninput=e=>{$('#echoVal').textContent=e.target.value+'%';setEcho(e.target.value/100);markDirty()};$('#scBtn').onclick=()=>{sidechain=!sidechain;$('#scBtn').classList.toggle('primary',sidechain);markDirty();toast(sidechain?'Sidechain on: kick ducks the bass':'Sidechain off')};$('#chain').addEventListener('input',markDirty);$('#key').addEventListener('change',markDirty);$('#scale').addEventListener('change',markDirty);$('#blankBtn').onclick=blankLoop;$('#variAmount').oninput=e=>{$('#variVal').textContent=e.target.value+'%';markDirty()};$('#variVal').textContent=$('#variAmount').value+'%';$('#applyEuclid').onclick=applyEuclid;$('#humanizeTrack').onclick=humanizeTrack;$('#promptChips').onclick=e=>{const b=e.target.closest('button');if(!b)return;e.preventDefault();const ta=$('#genPrompt');ta.value=(ta.value.trim()?ta.value.trim()+' ':'')+b.dataset.w;ta.focus()};
   $('#previewSound').onclick=async()=>{
     if(previewSource){stopSoundPreview();return}
     if(!await ensureAudio())return toast('Audio is blocked. Tap again.');
