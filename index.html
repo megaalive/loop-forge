@@ -2234,6 +2234,21 @@ function syncProposalCard(){
     +'<div class="gp-row"><span>Variation</span><b>'+Math.round(d.variation*100)+'%</b></div>'
     +'<div class="gp-row"><span>Keep</span><b>'+escHtml(preserve)+'</b></div>';
 }
+// Honest, state-aware Seed hint. Seeded reproducibility only holds where the seed
+// actually drives the RNG with the SAME baseline:
+//   · local-text New idea  → runGen() is seeded → reproducible with same text/settings
+//   · Variation            → variationToNext() is seeded → reproducible from the SAME source part
+//   · A–D                  → the seed only drives the B–D mutation; part A is generated
+//                            fresh via populateCurrentIdea() (Math.random), so we must NOT
+//                            promise full reproducibility.
+//   · plain New idea (Current, no text) → generateIdea() ignores the seed entirely.
+function seedHintForState(){
+  if(genMode==='variation')return 'Used by this variation. Same seed + same source part/settings reproduces the same variation.';
+  const scope=genScope();
+  if(scope==='all')return 'Seed affects the B–D variations. Part A is generated fresh, so A–D is not fully reproducible.';
+  if(nativeLocalTextRaw().length>0)return 'Used by this local-text generation. Same seed + same text/settings reproduces the same result.';
+  return 'Not used by this Generate (New idea follows Style/Simple↔Busy). Used by A–D, Variation and Fill gaps.';
+}
 // Reflect engine + native mode into the DOM. Visibility only — no mutation.
 function syncGenUI(){
   const llm=genEngine==='llm';
@@ -2274,15 +2289,11 @@ function syncGenUI(){
   if(feelRow)feelRow.style.display=(localActive&&localTextOn)?'none':'';
   // Seed is read by runGen() (local text), generateAllParts() (A–D), variationToNext()
   // (Variation) and fillGaps() (always available in Native). It is therefore available
-  // in every Native state; the hint spells out which operations consume it so the field
-  // is never silently ignored by the primary Generate CTA.
-  const scope=genScope();
-  const seedReadByCTA=!llm&&(genMode==='variation'||(genMode==='new'&&(scope==='all'||localTextOn)));
+  // in every Native state; the hint spells out honestly which operations consume it and
+  // whether reproducibility can be claimed — the A–D base part is generated fresh.
   const seedRow=$('#genSeedRow');if(seedRow)seedRow.style.display=llm?'none':'';
   const seedHint=$('#genSeedHint');
-  if(seedHint)seedHint.textContent=seedReadByCTA
-    ? 'Used by this operation. Same seed + same settings reproduces the same result.'
-    : 'Not used by this Generate (New idea follows Style/Simple↔Busy). Used by A–D, Variation and Fill gaps.';
+  if(seedHint)seedHint.textContent=seedHintForState();
   $$('#genMode button').forEach(b=>{const on=b.dataset.mode===genMode;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false')});
   const from=$('#genVarFrom'),to=$('#genVarTo');
   if(from)from.textContent=currentPattern;
