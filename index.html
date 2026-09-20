@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.9.1 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.9.2 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.9.1 — AI mode 1 harden ===== */
+/* ===== LOOPFORGE-16 v4.9.2 — AI variation semantics ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -547,7 +547,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.9.1', STEPS=16, TRACKS=16;
+const APP_VERSION='4.9.2', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1293,7 +1293,19 @@ const SecretStore={
 const AI_TARGETS=['drums','bass','harmony','melody'];
 const AI_STYLES=['Techno','House','Dark Ambient','Breakbeat','Trap','Funk','Jaipongan-ish','Minimal'];
 const AI_ROLES=['kick','snare','hat','perc','bass','chord','melody','arp','texture','fx','sample'];
-const AI_PRESERVE_GROUPS=['drums','bass','harmony','melody','texture','full'];
+// Preserve namespace: a token is EITHER a role OR a group, never both.
+// melody/arp/texture/fx are always single roles; only the group tokens expand.
+const AI_GROUP_TOKENS=['drums','bass','harmony','melodic','texture_fx','all'];
+const AI_GROUP_ROLES={
+  drums:['kick','snare','hat','perc'],
+  bass:['bass'],
+  harmony:['chord'],
+  melodic:['melody','arp'],
+  texture_fx:['texture','fx'],
+  all:AI_ROLES
+};
+function rolesForSpec(spec){return AI_GROUP_ROLES[spec]?AI_GROUP_ROLES[spec].slice():[spec]}
+function isKnownPreserveSpec(spec){return AI_ROLES.includes(spec)||AI_GROUP_TOKENS.includes(spec)}
 const AI_FIELDS=['action','target','style','density','syncopation','humanizeMs','variation','preserve'];
 const AI_PROTO_KEYS=['__proto__','constructor','prototype'];
 function clamp01(v){return clamp(+v||0,0,1)}
@@ -1313,8 +1325,8 @@ function AIValidator(raw){
   let preserve=[];
   if(raw.preserve!=null){
     if(!Array.isArray(raw.preserve)||raw.preserve.some(x=>typeof x!=='string'))return {ok:false,error:'preserve must be an array of role names'};
-    const bad=raw.preserve.filter(r=>!AI_ROLES.includes(r)&&!AI_PRESERVE_GROUPS.includes(r));
-    if(bad.length)return {ok:false,error:'unknown role(s) in preserve: '+bad.join(', ')};
+    const bad=raw.preserve.filter(r=>!isKnownPreserveSpec(r));
+    if(bad.length)return {ok:false,error:'unknown role/group in preserve: '+bad.join(', ')};
     preserve=raw.preserve
   }
   return {ok:true,decision:{
@@ -1369,24 +1381,15 @@ function extractJson(text){
 }
 
 /* ---- LocalExecutor: reuses the existing local generator; Lock always wins ---- */
-/* Typed target/preserve semantics — no natural-language roundtrip. */
-const AI_GROUP_ROLES={
-  drums:['kick','snare','hat','perc'],
-  bass:['bass'],
-  harmony:['chord'],
-  melody:['melody','arp'],
-  texture:['texture','fx'],
-  full:AI_ROLES
-};
+/* Typed target/preserve semantics — no natural-language roundtrip.
+   Group tokens (defined next to the validator) expand; target names are their
+   own namespace and never collide with role names. */
 const AI_TARGET_ROLES={
   drums:['kick','snare','hat','perc'],
   bass:['bass'],
   harmony:['chord'],
   melody:['melody','arp']
 };
-function rolesForSpec(spec){
-  return AI_ROLES.includes(spec)?[spec]:(AI_GROUP_ROLES[spec]||[spec])
-}
 function expandPreserve(preserve){
   const set=new Set();
   (preserve||[]).forEach(spec=>rolesForSpec(spec).forEach(r=>set.add(r)));
@@ -1410,23 +1413,71 @@ let aiProposal=null,aiAbort=null,aiRequestId=0;
 function aiDecisionToIntent(d){
   return {style:d.style,density:d.density,sync:d.syncopation,dark:d.style==='Dark Ambient'?.8:.5,soft:.45,human:clamp(Math.round(d.humanizeMs),0,40),q:''}
 }
+// Apply the new sound parameters from a decision WITHOUT touching the notes.
+function applySoundFromIntent(tr,intent){
+  if(intent.style==='Dark Ambient'){tr.cutoff=Math.min(tr.cutoff||3200,1200)}
+  // humanizeMs only affects timing/velocity spread, applied later via mutate, not here
+}
+// Baseline-aware executor: the CURRENT track is the baseline. The candidate
+// a fresh generation produces is blended in proportion to `variation`:
+//   variation 0   → keep the existing pattern; only sound params move
+//   variation 1   → accept the candidate wholesale
 function localExecutorApply(p){
   const d=p&&p.decision?p.decision:p;
   const preserveSet=expandPreserve(d.preserve);
   const ids=semanticTargetIndexes(d.target,preserveSet);
   if(!ids.length)return {applied:0,reason:'No writable target (locked or all preserved)'};
   checkpoint('AI reshape');
-  const intent=aiDecisionToIntent(d);
-  const rng=seeded(hash32(JSON.stringify(d)+'|'+currentPattern));
-  // Write fresh, target only the matched tracks.
-  ids.forEach(i=>genRoleTrack(i,intent,rng,true));
-  // variation → reuse the existing Similar↔Wild mutation machinery on the same tracks.
-  if(d.variation>0){
-    const seed=hash32(JSON.stringify(d)+'|var|'+currentPattern);
-    mutateSelectedTracks(ids,seed,d.variation)
-  }
+  const intent=aiDecisionToIntent(d),ts=tracks(),v=clamp01(d.variation);
+  const candSeed=hash32(JSON.stringify(d)+'|'+currentPattern);
+  ids.forEach(i=>{
+    const baseline=cloneData(ts[i]);           // current pattern = baseline
+    applySoundFromIntent(baseline,intent);
+    const cand=cloneData(baseline);            // candidate built from the baseline's params
+    ts[i]=cand;
+    genRoleTrack(i,intent,seeded(candSeed),true); // fills ts[i] with the fresh candidate
+    // Blend: variation 0 keeps the baseline; variation 1 accepts the candidate.
+    ts[i]=v>=1?ts[i]:mixBaselineCandidate(baseline,ts[i],v,i);
+    applySoundFromIntent(ts[i],intent);
+    if(d.humanizeMs>0)humanizeTrackRef(ts[i],i,d.humanizeMs)
+  });
   markForge(onKeys());renderAll();
   return {applied:ids.length}
+}
+// Blend baseline and candidate: at v=0 keep baseline notes; at v=1 take candidate.
+// Fraction f of baseline note/step positions is replaced by candidate material.
+function mixBaselineCandidate(baseline,cand,v,i){
+  const out=cloneData(baseline);
+  const f=clamp01(v);
+  if(isPitchedTrack(baseline)){
+    const base=noteEvents(baseline),candN=noteEvents(cand);
+    if(!base.length){return f>0?cloneData(cand):out}
+    if(f<=0){out.noteEvents=cloneData(base);return out}
+    // keep each baseline note with prob (1-f); add candidate notes where they don't overlap kept ones
+    const rng=seeded(hash32('mix'+i+JSON.stringify(base.length)+JSON.stringify(candN.length)+Math.round(f*1000)));
+    const kept=base.filter(()=>rng()>=f);
+    const keptSet=new Set(kept.map(n=>n.pitch+'@'+n.start));
+    const added=candN.filter(n=>rng()<f && !keptSet.has(n.pitch+'@'+n.start));
+    out.noteEvents=kept.concat(added).map(cloneData);
+    if(!out.noteEvents.length)out.noteEvents=base.slice(0,1).map(cloneData)
+  } else {
+    const rng=seeded(hash32('mix'+i+JSON.stringify(baseline.steps)+JSON.stringify(cand.steps)+Math.round(f*1000)));
+    for(let k=0;k<STEPS;k++){
+      if(rng()<f)out.steps[k]=cloneData(cand.steps[k])
+    }
+  }
+  return out
+}
+// role-aware humanize used by the AI executor (mirrors humanizeTrack but index-based)
+function humanizeTrackRef(tr,i,amt){
+  if(!tr||tr.locked)return;
+  const role=trackRole(tr,i);
+  const factor=HUMANIZE_BY_ROLE[role]||HUMANIZE_BY_ROLE[tr.type]||HUMANIZE_BY_ROLE.default;
+  const roleAmt=Math.round(clamp(+amt||0,0,40)*factor);
+  const rnd=()=>clamp(Math.round((Math.random()*2-1)*roleAmt),-80,80);
+  const velChance=Math.min(.6,.25+factor*.2);
+  if(isPitchedTrack(tr)){noteEvents(tr).forEach(n=>{n.shift=rnd();if(chance(velChance))n.velocity=clamp(n.velocity+(chance(.5)?1:-1),1,3)})}
+  else tr.steps.forEach(st=>{if(st.v){st.shift=rnd();if(chance(velChance))st.v=clamp(st.v+(chance(.5)?1:-1),1,3)}});
 }
 function setAiStatus(msg,warn){const el=$('#aiStatus');if(el){el.textContent=msg;el.classList.toggle('ai-warn',!!warn)}}
 function refreshAiUI(){
@@ -1435,12 +1486,19 @@ function refreshAiUI(){
   if(!has)setAiStatus('AI off. Add a key to let the model choose parameters; the local generator still writes the notes.');
 }
 function invalidateAiRequests(){aiRequestId++;if(aiAbort){try{aiAbort.abort()}catch(_){}aiAbort=null}}
-// Context fingerprint captures everything Apply depends on *besides* the decision.
+// Context fingerprint captures what Apply depends on: the active part, the key/scale,
+// and per-track role/lock (executor targets by role). Edits to INACTIVE parts do not
+// invalidate the proposal — only the part being changed does.
+function activePartFingerprint(){
+  // role/lock/type drive target selection; steps/noteEvents drive the baseline
+  // that variation is measured against. All of that belongs to the active part.
+  return JSON.stringify(state.patterns[currentPattern].map(tr=>({role:tr.role,locked:tr.locked,type:tr.type,steps:tr.steps,noteEvents:tr.noteEvents})))
+}
 function aiContextSnapshot(){
-  return {pattern:currentPattern,key:$('#key').value,scale:$('#scale').value,state:JSON.stringify(state)}
+  return {pattern:currentPattern,key:$('#key').value,scale:$('#scale').value,part:activePartFingerprint()}
 }
 function aiContextChanged(ctx){
-  return !ctx||ctx.pattern!==currentPattern||ctx.key!==$('#key').value||ctx.scale!==$('#scale').value||ctx.state!==JSON.stringify(state)
+  return !ctx||ctx.pattern!==currentPattern||ctx.key!==$('#key').value||ctx.scale!==$('#scale').value||ctx.part!==activePartFingerprint()
 }
 // Start a request: bump id, abort the previous one, capture a LOCAL controller.
 function beginAiRequest(){
@@ -1549,11 +1607,7 @@ function mutatePattern(p,seed,amount=.18,intensity=.5){
   const ts=state.patterns[p],rng=seeded(seed);
   ts.forEach((tr,i)=>mutateTrack(tr,i,rng,amount,intensity))
 }
-function mutateSelectedTracks(indexes,seed,intensity){
-  const ts=tracks(),rng=seeded(seed);
-  const amount=.02+clamp(intensity,0,1)*.5;
-  indexes.forEach(i=>mutateTrack(ts[i],i,rng,amount,intensity))
-}
+
 function variationToNext(){
   checkpoint('Variation');
   const order=['A','B','C','D'],n=order[(order.indexOf(currentPattern)+1)%4];

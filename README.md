@@ -103,6 +103,12 @@ Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia 
 - **Lock selalu menang**; `preserve` dihormati.
 - **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
 
+### Perbaikan 4.9.2 (semantik variation & preserve)
+
+- **`variation` kini relatif ke pola yang sedang ada.** Sebelumnya executor menulis ulang track lalu memutasinya, jadi `variation 0%` bisa mengganti seluruh bass. Sekarang track saat ini menjadi **baseline**: kandidat dibuat terpisah, lalu `variation` menentukan berapa banyak kandidat menggantikan baseline (0% = baseline dipertahankan, 100% = kandidat dipakai penuh). "Buat bass lebih gelap tapi tetap mirip" sekarang benar-benar berarti demikian.
+- **Tabrakan namespace role/group dihapus.** Token kini eksklusif: `melody`, `arp`, `texture`, `fx` **selalu** role tunggal; hanya token grup `drums`, `bass`, `harmony`, `melodic`, `texture_fx`, `all` yang diekspansi. Jadi `preserve ["melody"]` = melody saja (bukan melody+arp).
+- **Stale-check tidak lagi berlebihan**: fingerprint hanya mencakup part aktif (role/lock/type + steps/noteEvents) dan key/scale. Mengedit part lain (B/C/D) tidak lagi membatalkan proposal untuk part aktif, tetapi mengedit part aktif tetap membatalkannya.
+
 ### Perbaikan 4.9.1 (stabilisasi Mode 1)
 
 - **Typed preserve benar-benar typed**: tidak ada lagi konversi ke kalimat `"keep drums bass"`. `expandPreserve()` memperluas grup secara deterministik (`drums→kick/snare/hat/perc`, `harmony→chord`, dst.) dan `isPreserved()` mencocokkan role aktual, jadi `["kick","snare","hat"]` maupun `["drums","bass"]` dihormati persis.
@@ -130,4 +136,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.9.1**.
+Versi saat ini: **4.9.2**.
