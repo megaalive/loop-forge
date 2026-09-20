@@ -530,7 +530,7 @@ let iosAudioBridge=null, iosAudioBridgeUrl=null;
 const noiseBufferCache=new WeakMap();
 let trackBuses=Array(TRACKS).fill(null), previewSource=null, previewTrackIndex=-1;
 let renderMaster=null, renderBuses=null;
-let analyser=null, vizCtx=null, meterRAF=null, lastMeter=0;
+let analyser=null, vizCtx=null, meterRAF=null, lastMeter=0, metersIdle=true;
 let echoSend=null, echoDelay=null, echoFb=null, echoWet=null, sidechain=false;
 const visualTimers=new Set();
 const LS_KEY='loopforge16-v4', LS_MODE='loopforge-mode';
@@ -683,14 +683,21 @@ function drawViz(){
   for(let i=0;i<d.length;i++){const x=i/(d.length-1)*w,y=h/2+(d[i]-128)/128*(h/2-1);if(i)vizCtx.lineTo(x,y);else vizCtx.moveTo(x,y)}
   vizCtx.stroke()
 }
-function updateMixerMeters(){
+function updateMixerMeters(reset){
   const panel=$('#mixer');if(!panel||panel.style.display==='none')return;
   const rows=$('#mixerBody').children;
-  for(let i=0;i<rows.length;i++){const el=rows[i].querySelector('.vmeter');if(!el)continue;const bus=trackBuses[i];el.style.width=Math.round(peakOf(bus&&bus.analyser)*100)+'%'}
+  for(let i=0;i<rows.length;i++){const el=rows[i].querySelector('.vmeter');if(!el)continue;if(reset){el.style.width='0%';continue}const bus=trackBuses[i];el.style.width=Math.round(peakOf(bus&&bus.analyser)*100)+'%'}
 }
+function metersActive(){return isPlaying||!!previewSource}
 function startMeters(){
   if(meterRAF)return;
-  const loop=()=>{meterRAF=requestAnimationFrame(loop);const now=performance.now();if(now-lastMeter<45)return;lastMeter=now;drawViz();updateMixerMeters()};
+  const loop=()=>{
+    meterRAF=requestAnimationFrame(loop);
+    if(document.hidden)return;
+    if(!metersActive()){if(!metersIdle){metersIdle=true;if(vizCtx)vizCtx.clearRect(0,0,180,16);updateMixerMeters(true)}return}
+    metersIdle=false;
+    const now=performance.now();if(now-lastMeter<45)return;lastMeter=now;drawViz();updateMixerMeters()
+  };
   meterRAF=requestAnimationFrame(loop)
 }
 function unlockAudioTick(){
