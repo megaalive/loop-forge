@@ -1983,8 +1983,12 @@ function syncGenCTA(){
     btn.disabled=false;btn.title='';
     return
   }
-  if(aiProposal){btn.textContent='Apply proposal';btn.disabled=false;btn.title='Apply the proposed parameters via the local generator'}
-  else if(scope==='all'){btn.textContent='LLM A\u2013D not available yet';btn.disabled=true;btn.title='Whole-song LLM generation is not implemented; use the Native engine for A\u2013D'}
+  // INVARIANT: while Engine=LLM and scope=A\u2013D, whole-song LLM is unsupported,
+  // so the CTA is disabled regardless of whether a Current-part proposal exists.
+  // Scope is therefore checked BEFORE aiProposal. The proposal itself is kept
+  // (not discarded) so switching back to Current can offer Apply again.
+  if(scope==='all'){btn.textContent='LLM A\u2013D not available yet';btn.disabled=true;btn.title='Whole-song LLM generation is not implemented; use the Native engine for A\u2013D'}
+  else if(aiProposal){btn.textContent='Apply proposal';btn.disabled=false;btn.title='Apply the proposed parameters via the local generator'}
   else{btn.textContent='Ask LLM';btn.disabled=false;btn.title=''}
 }
 function openGenerator(){
@@ -2031,8 +2035,10 @@ function genAction(kind){
 // The one and only CTA click. Engine and scope are read here, live.
 function runPrimaryCTA(){
   if(genEngine==='llm'){
-    if(aiProposal){aiApply();return}         // proposal ready → Apply
+    // Same invariant as syncGenCTA: scope A\u2013D wins over any ready proposal,
+    // so the Current-part proposal can never be applied while A\u2013D is selected.
     if(genScope()==='all'){toast('LLM A\u2013D not available yet');syncGenCTA();return}
+    if(aiProposal){aiApply();return}         // proposal ready → Apply
     aiAsk();return
   }
   if(aiProposal)aiProposal=null;             // leaving LLM state behind
