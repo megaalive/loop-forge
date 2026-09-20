@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.11.1 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.11.2 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.11.1 — generator dialog ===== */
+/* ===== LOOPFORGE-16 v4.11.2 — generator dialog ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -138,12 +138,17 @@ button{cursor:pointer}
 .sequence-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2);box-shadow:inset 0 1px 0 rgba(255,255,255,.02)}
 .seq{min-width:970px}
 .seq-head,.track{display:grid;grid-template-columns:175px repeat(16,1fr);gap:4px;align-items:center;padding:5px 7px}
-.seq-head{position:sticky;top:0;z-index:5;background:var(--surface-2);border-bottom:1px solid var(--border);color:var(--text-faint);font:10.5px/1 var(--mono);text-align:center}
+.seq-head{position:sticky;top:0;z-index:5;background:var(--surface-2);border-bottom:1px solid var(--border);color:var(--text-faint);font:10.5px/1 var(--mono);text-align:center;--seqcol-bg:var(--surface-2)}
 .seq-head>div:first-child{text-align:left;letter-spacing:.08em;font-weight:700}
-.track{border-bottom:1px solid var(--border-soft);min-height:34px}
+/* Sticky left column: the track name/role stays pinned while steps 1-16 scroll.
+   Each sticky cell paints its own opaque background (matching its row state)
+   so steps never show through. Stays below the modal (z-index 130) and popover (120). */
+.seq-head>div:first-child,.tracklabel{position:sticky;left:0;z-index:3;background:var(--seqcol-bg,var(--surface-2))}
+.seq-head>div:first-child{z-index:7}
+.track{border-bottom:1px solid var(--border-soft);min-height:34px;--seqcol-bg:var(--surface-2)}
 .track:last-child{border-bottom:0}
-.track:hover{background:rgba(255,255,255,.015)}
-.track.selected{background:var(--surface-3)}
+.track:hover{--seqcol-bg:#16181c;background:rgba(255,255,255,.015)}
+.track.selected{--seqcol-bg:var(--surface-3);background:var(--surface-3)}
 .locked{opacity:.58}
 
 .tracklabel{height:28px;display:flex;align-items:center;gap:6px;min-width:0}
@@ -396,8 +401,11 @@ body.easy .status{display:none}
 body.easy .genbox{display:none}
 body.easy .technical-help{display:none!important}
 body.easy .tracknum{display:none}
-body.easy .simple-track-actions .lock,
-body.easy .simple-track-actions .warn{display:none}
+/* Easy mode keeps the loud path simple, but an ACTIVE lock/solo must stay
+   reachable so the user is never stuck: hide only the inactive ones (state is
+   carried by the existing `.on` class), never reset the state itself. */
+body.easy .simple-track-actions .lock:not(.on),
+body.easy .simple-track-actions .warn:not(.on){display:none}
 body.easy .simple-track-actions .mini{min-width:24px;padding:3px}
 body.easy .trackrole{display:none}
 body.easy .mixer-head,body.easy .mixer-row{grid-template-columns:minmax(90px,1fr) minmax(70px,auto) 30px}
@@ -411,6 +419,9 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
   .sidebar{border-left:0;border-top:1px solid var(--border)}
   .workspace,.sidebar{padding:9px}
   .seq{min-width:900px}
+  /* Sidebar is stacked under the workspace here, so its sticky tabs would slip
+     under the sticky topbar. Drop stickiness in the stacked layout. */
+  .tabs{position:static}
 }
 @media (max-width:520px){
   .topbar{padding:8px 10px}
@@ -418,7 +429,11 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
   .brand small{display:none}
   .transport{width:100%}
   #playBtn{flex:1}
-  .field span.hide-sm{display:none}
+  /* On phones the BPM/Swing labels used to disappear, leaving bare numbers and
+     sliders. Keep short visible labels (wrapping the topbar is fine). */
+  .topbar .field{gap:4px}
+  .topbar .field>span{font-size:10.5px}
+  #swing{min-width:64px}
   .row,.grid2{grid-template-columns:1fr}
   .welcome{flex-direction:column;align-items:flex-start}
   .seq-head,.track{grid-template-columns:148px repeat(16,40px)}
@@ -455,15 +470,15 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
     </div>
   </header>
 
-  <div class="status" id="status"><span class="status-seg">AUDIO <strong id="audioStatus">[TAP PLAY]</strong></span><span class="status-seg">SEQUENCER <strong>[READY]</strong></span><span class="status-seg">GENERATOR <strong>[LOCAL]</strong></span><span class="status-seg">SAVE <strong id="saveStatus">[AUTO]</strong></span><span class="status-seg viz-seg" title="Master output"><canvas id="viz" width="180" height="16"></canvas></span><span class="status-seg">MIDI <strong id="midiStatus">[OFF]</strong></span><span class="status-seg">WEBGPU <strong id="gpuStatus">[OPTIONAL]</strong></span></div>
+  <div class="status" id="status"><span class="status-seg">AUDIO <strong id="audioStatus">[TAP PLAY]</strong></span><span class="status-seg">SEQUENCER <strong>[READY]</strong></span><span class="status-seg">GENERATOR <strong>[LOCAL]</strong></span><span class="status-seg">SAVE <strong id="saveStatus">[AUTO]</strong></span><span class="status-seg viz-seg" title="Master output"><canvas id="viz" width="180" height="16"></canvas></span><span class="status-seg">MIDI <strong id="midiStatus">[OFF]</strong></span></div>
 
   <main class="main">
     <section class="workspace">
       <div id="welcome" class="welcome">
-        <div><strong>Make something in three moves.</strong><div class="welcome-steps"><span>Tap squares</span><span>Press Play</span><span>Or hit Generate for a full idea</span></div></div>
+        <div><strong>Make something in three moves.</strong><div class="welcome-steps"><span>Tap squares: drums toggle, melodies open notes</span><span>Press Play</span><span>Or hit Generate for a full idea</span></div></div>
         <button id="hideWelcome" class="btn">Got it</button>
       </div>
-      <div class="modehint"><b>Tip:</b> each row is one sound. Bright squares will play.</div>
+      <div class="modehint"><b>Tip:</b> each row is one sound. Drums: tap squares. Melodies: tap a square to open notes.</div>
       <div class="patternbar">
         <span class="section-label">Part</span>
         <button class="btn patternbtn active" data-pattern="A">A</button>
@@ -497,11 +512,13 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
             <label class="control">Role<select id="trackRole"><option>kick</option><option>snare</option><option>hat</option><option>perc</option><option>bass</option><option>chord</option><option>melody</option><option>arp</option><option>texture</option><option>fx</option><option>sample</option></select></label>
             <label class="control">Lock from changes<select id="trackLock"><option value="false">Unlocked</option><option value="true">Locked</option></select></label>
           </div>
-          <div class="row">
+          <div class="row one">
             <label class="control">Instrument<select id="soundType"><option value="synth">Synth</option><option value="kick">Kick</option><option value="snare">Snare</option><option value="hat">Hat</option><option value="clap">Clap</option><option value="tom">Tom</option><option value="sample">Sample</option></select></label>
+          </div>
+          <div class="row one" data-inst="synth tom sample">
             <label class="control">Tune<input id="tune" type="range" min="-24" max="24" value="0"></label>
           </div>
-          <details class="morebox advanced-only"><summary>More sound controls</summary><div class="inside">
+          <details class="morebox advanced-only" data-inst="synth"><summary>More sound controls</summary><div class="inside">
           <div class="row">
             <label class="control">Osc A<select id="oscA"><option>sawtooth</option><option>square</option><option>sine</option><option>triangle</option></select></label>
             <label class="control">Osc B<select id="oscB"><option>square</option><option>sawtooth</option><option>sine</option><option>triangle</option></select></label>
@@ -521,11 +538,13 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
             <label class="control">Release<input id="release" type="range" min="10" max="2500" value="120"></label>
           </div>
           </div></details>
-          <div style="height:8px"></div>
+          <div style="height:8px" data-inst="sample"></div>
+          <div data-inst="sample">
           <label class="control">Load your sound<input id="sampleFile" type="file" accept="audio/*"></label>
           <label class="control" style="margin-top:8px">Play sample<select id="sampleMode"><option value="full">Whole sound</option><option value="slice">Cut into 16 pieces</option></select></label>
           <canvas id="wave" class="wave" width="260" height="54" title="Click a slice to assign it to the current step"></canvas>
           <div id="slicePads" class="padgrid"></div>
+          </div>
           <button id="previewSound" class="btn big-action" style="margin-top:8px">Hear this sound</button>
 
         </div>
@@ -540,11 +559,11 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
           </div>
           <label class="control">Microtiming <span id="shiftVal">0 ms</span><input id="stepShift" type="range" min="-80" max="80" value="0"></label>
           <div class="row" style="margin-top:8px">
-            <label class="control">MIDI note<input id="stepNote" type="number" min="24" max="108" placeholder="auto"></label>
-            <label class="control">Sample slice<input id="stepSlice" type="number" min="1" max="16" value="1"></label>
+            <label class="control" data-stepinst="synth">MIDI note<input id="stepNote" type="number" min="24" max="108" placeholder="auto"></label>
+            <label class="control" data-stepinst="sample">Sample slice<input id="stepSlice" type="number" min="1" max="16" value="1"></label>
           </div>
           <div class="grid2"><button id="clearStep" class="btn danger">CLEAR</button><button id="copyStep" class="btn">COPY</button><button id="pasteStep" class="btn">PASTE</button><button id="auditionStep" class="btn">AUDITION</button></div>
-          <p class="small">Microtiming bekerja di luar grid tanpa mengubah swing. MIDI note kosong = note otomatis/track default.</p>
+          <p class="small" id="stepNoteHint">Microtiming bekerja di luar grid tanpa mengubah swing. MIDI note kosong = note otomatis/track default.</p>
         </div>
       </section>
       <section class="panel sidepanel" id="mixer" style="display:none">
@@ -775,7 +794,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.11.1', STEPS=16, TRACKS=16;
+const APP_VERSION='4.11.2', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -867,7 +886,24 @@ function initialTabName(){
   const firstVisible=$$('.tab').find(x=>x.offsetParent!==null);
   return (marked||firstVisible||{}).dataset?.show||'sound';
 }
-function setMode(easy){document.body.classList.toggle('easy',!!easy);const b=$('#moreBtn');if(b){b.classList.toggle('on',!easy);b.textContent=easy?'More':'Less'}}
+// Easy mode hides advanced editing. If the sidebar was left on a tab that Easy
+// does not offer (e.g. Step), snap the selection back to Sound so exactly one
+// visible tab is active and its panel actually matches — no orphan panels.
+function visibleTabName(name){
+  const t=$$('.tab').find(x=>x.dataset.show===name);
+  return (t&&t.offsetParent!==null)?name:null
+}
+function setMode(easy){
+  document.body.classList.toggle('easy',!!easy);
+  const b=$('#moreBtn');if(b){b.classList.toggle('on',!easy);b.textContent=easy?'More':'Less'}
+  const active=$$('.tab').find(x=>x.classList.contains('active'));
+  const activeName=active?active.dataset.show:null;
+  // In Easy, only tabs that are actually visible qualify; fall back to Sound.
+  const ok=easy?visibleTabName(activeName):activeName;
+  if(!ok||ok!==activeName){selectTab(easy?'sound':(ok||activeName||'sound'));return}
+  const shown=$$('.sidepanel').find(p=>p.style.display!=='none');
+  if((shown?shown.id:null)!==activeName)selectTab(activeName)
+}
 function currentStepObj(){return tracks()[selectedTrack].steps[selectedStep]}
 function isPitchedTrack(tr){return tr&&tr.type==='synth'&&['bass','chord','melody','arp','texture'].includes(tr.role)}
 function toggleTrackNotes(i){const tr=tracks()[i];if(!isPitchedTrack(tr))return toast('Notes are available on pitched synth tracks');selectedTrack=i;if(expandedTracks.has(i))expandedTracks.delete(i);else expandedTracks.add(i);renderAll()}
@@ -1303,7 +1339,7 @@ function renderInlinePiano(tr,i){
   scroll.appendChild(grid);wrap.appendChild(scroll);return wrap;
 }
 function buildNoteTools(tr,i){
-  const box=document.createElement('div');box.className='note-tools';
+  const box=document.createElement('div');box.className='note-tools advanced-only';
   const scaleName=escHtml($('#scale').value),keyName=escHtml($('#key').value);
   const rootPitch=chordRootForTrack(tr,selectedStep);
   box.innerHTML='<span class="nt-label">Chord ('+keyName+' '+scaleName+')</span>'
@@ -1360,10 +1396,36 @@ function renderSlicePads(){const root=$('#slicePads');root.innerHTML='';const tr
 function selectedStepObjAssignSlice(i,preview){if(tracks()[selectedTrack].locked)return toast('Track is locked');checkpoint('Slice');const tr=tracks()[selectedTrack],st=currentStepObj();tr.sliceMode=true;st.slice=i;$('#sampleMode').value='slice';renderAll();if(preview)auditionSlice(i)}
 async function auditionSlice(i){if(!await ensureAudio())return;const tr=tracks()[selectedTrack];if(!sampleBuffers[selectedTrack])return toast('Load a sample first');if(tr.mute)return toast('This track is muted');previewSampleTrack(selectedTrack,i)}
 
-function syncSoundPanel(){const tr=tracks()[selectedTrack];$('#selectedName').textContent=tr.name;$('#trackName').value=tr.name;$('#trackRole').value=tr.role||defaultRoles[selectedTrack];$('#trackLock').value=String(!!tr.locked);const map={soundType:'type',tune:'tune',oscA:'oscA',oscB:'oscB',oscMix:'oscMix',fm:'fm',cutoff:'cutoff',resonance:'resonance',attack:'attack',decay:'decay',sustain:'sustain',release:'release'};Object.entries(map).forEach(([id,key])=>{const el=$('#'+id),v=tr[key];el.value=['oscMix','fm','sustain'].includes(id)?Math.round(v*100):['attack','decay','release'].includes(id)?Math.round(v*1000):v});$('#sampleMode').value=tr.sliceMode?'slice':'full';renderSlicePads();drawWaveform()}
-function bindSound(){const transform={soundType:v=>v,tune:v=>+v,oscA:v=>v,oscB:v=>v,oscMix:v=>v/100,fm:v=>v/100,cutoff:v=>+v,resonance:v=>+v,attack:v=>v/1000,decay:v=>v/1000,sustain:v=>v/100,release:v=>v/1000};Object.entries(transform).forEach(([id,fn])=>{const el=$('#'+id);el.addEventListener('pointerdown',()=>checkpoint('Sound'));el.addEventListener('input',e=>{const key={soundType:'type'}[id]||id;tracks()[selectedTrack][key]=fn(e.target.value);markDirty()})});$('#trackName').addEventListener('change',e=>{checkpoint('Rename');tracks()[selectedTrack].name=(e.target.value.trim()||names[selectedTrack]).slice(0,24);renderAll()});$('#trackRole').onchange=e=>{checkpoint('Role');tracks()[selectedTrack].role=e.target.value;renderAll()};$('#trackLock').onchange=e=>{checkpoint('Lock');tracks()[selectedTrack].locked=e.target.value==='true';renderAll()};$('#sampleMode').onchange=e=>{checkpoint('Sample mode');tracks()[selectedTrack].sliceMode=e.target.value==='slice';renderAll()}}
+function syncSoundPanel(){const tr=tracks()[selectedTrack];$('#selectedName').textContent=tr.name;$('#trackName').value=tr.name;$('#trackRole').value=tr.role||defaultRoles[selectedTrack];$('#trackLock').value=String(!!tr.locked);const map={soundType:'type',tune:'tune',oscA:'oscA',oscB:'oscB',oscMix:'oscMix',fm:'fm',cutoff:'cutoff',resonance:'resonance',attack:'attack',decay:'decay',sustain:'sustain',release:'release'};Object.entries(map).forEach(([id,key])=>{const el=$('#'+id),v=tr[key];el.value=['oscMix','fm','sustain'].includes(id)?Math.round(v*100):['attack','decay','release'].includes(id)?Math.round(v*1000):v});$('#sampleMode').value=tr.sliceMode?'slice':'full';applySoundVisibility(tr);renderSlicePads();drawWaveform()}
+// Progressive disclosure for the Sound tab, driven by the ACTUAL instrument the
+// runtime `hit()` reads: Tune is used by synth/tom/sample; the oscillator/filter/
+// ADSR block only by synth; the file/mode/wave/slice block only by sample.
+// Common controls (Name, Instrument, Hear this sound) always stay visible.
+function applySoundVisibility(tr){
+  const type=(tr&&tr.type)||'synth';
+  $$('#sound [data-inst]').forEach(el=>{el.style.display=el.dataset.inst.split(/\s+/).includes(type)?'':'none'})
+}
+function bindSound(){const transform={soundType:v=>v,tune:v=>+v,oscA:v=>v,oscB:v=>v,oscMix:v=>v/100,fm:v=>v/100,cutoff:v=>+v,resonance:v=>+v,attack:v=>v/1000,decay:v=>v/1000,sustain:v=>v/100,release:v=>v/1000};Object.entries(transform).forEach(([id,fn])=>{const el=$('#'+id);el.addEventListener('pointerdown',()=>checkpoint('Sound'));el.addEventListener('input',e=>{const key={soundType:'type'}[id]||id;tracks()[selectedTrack][key]=fn(e.target.value);if(key==='type')applySoundVisibility(tracks()[selectedTrack]);markDirty()})});$('#trackName').addEventListener('change',e=>{checkpoint('Rename');tracks()[selectedTrack].name=(e.target.value.trim()||names[selectedTrack]).slice(0,24);renderAll()});$('#trackRole').onchange=e=>{checkpoint('Role');tracks()[selectedTrack].role=e.target.value;renderAll()};$('#trackLock').onchange=e=>{checkpoint('Lock');tracks()[selectedTrack].locked=e.target.value==='true';renderAll()};$('#sampleMode').onchange=e=>{checkpoint('Sample mode');tracks()[selectedTrack].sliceMode=e.target.value==='slice';renderAll()}}
 
-function syncStepPanel(){const tr=tracks()[selectedTrack],pitched=isPitchedTrack(tr),st=currentStepObj();$('#stepTitle').textContent=pitched?'T'+String(selectedTrack+1).padStart(2,'0')+' / NOTES':'T'+String(selectedTrack+1).padStart(2,'0')+' / S'+String(selectedStep+1).padStart(2,'0');['stepVelocity','stepProb','stepShift','stepNote','stepSlice','clearStep','copyStep','pasteStep'].forEach(id=>$('#'+id).disabled=pitched);$('#stepVelocity').value=st.v;$('#stepProb').value=String(st.p);$('#stepShift').value=st.shift||0;$('#shiftVal').textContent=pitched?'use inline notes':(st.shift||0)+' ms';$('#stepNote').value=st.n==null?'':st.n;$('#stepSlice').value=(st.slice||0)+1}
+function syncStepPanel(){const tr=tracks()[selectedTrack],pitched=isPitchedTrack(tr),st=currentStepObj();$('#stepTitle').textContent=pitched?'T'+String(selectedTrack+1).padStart(2,'0')+' / NOTES':'T'+String(selectedTrack+1).padStart(2,'0')+' / S'+String(selectedStep+1).padStart(2,'0');['stepVelocity','stepProb','stepShift','stepNote','stepSlice','clearStep','copyStep','pasteStep'].forEach(id=>$('#'+id).disabled=pitched);$('#stepVelocity').value=st.v;$('#stepProb').value=String(st.p);$('#stepShift').value=st.shift||0;$('#shiftVal').textContent=pitched?'use inline notes':(st.shift||0)+' ms';$('#stepNote').value=st.n==null?'':st.n;$('#stepSlice').value=(st.slice||0)+1;applyStepVisibility(tr,pitched)}
+// Step tab stays advanced, but only shows fields the audio path actually reads:
+// Velocity/Probability/Microtiming for any step-grid track; `Sample slice` only
+// when the instrument is a sample; `MIDI note` only for a non-pitched synth,
+// which is the sole case where hit() consumes noteOverride on the step grid.
+function applyStepVisibility(tr,pitched){
+  const type=(tr&&tr.type)||'synth';
+  $$('#stepedit [data-stepinst]').forEach(el=>{
+    const ok=pitched?false:el.dataset.stepinst.split(/\s+/).includes(type);
+    el.style.display=ok?'':'none'
+  });
+  const hint=$('#stepNoteHint');
+  if(hint){
+    const bits=['Microtiming bekerja di luar grid tanpa mengubah swing.'];
+    if(!pitched&&type==='synth')bits.push('MIDI note kosong = note otomatis/track default.');
+    if(!pitched&&type==='sample')bits.push('Sample slice mengikuti play sample mode.');
+    hint.textContent=bits.join(' ')
+  }
+}
 function stepLocked(){if(tracks()[selectedTrack].locked){toast('Track is locked');return true}return false}
 function bindStepPanel(){const change=(id,fn)=>{$('#'+id).addEventListener('change',e=>{if(isPitchedTrack(tracks()[selectedTrack])||stepLocked())return;checkpoint('Step');fn(currentStepObj(),e.target.value);renderAll()})};change('stepVelocity',(st,v)=>st.v=+v);change('stepProb',(st,v)=>st.p=+v);$('#stepShift').addEventListener('pointerdown',()=>{if(!isPitchedTrack(tracks()[selectedTrack])&&!tracks()[selectedTrack].locked)checkpoint('Shift')});$('#stepShift').addEventListener('input',e=>{if(isPitchedTrack(tracks()[selectedTrack])||stepLocked())return;currentStepObj().shift=+e.target.value;$('#shiftVal').textContent=e.target.value+' ms';markDirty();renderSeq()});change('stepNote',(st,v)=>st.n=v===''?null:clamp(+v,24,108));change('stepSlice',(st,v)=>st.slice=clamp(+v-1,0,15));$('#clearStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack])||stepLocked())return;checkpoint('Clear step');Object.assign(currentStepObj(),stepTemplate());renderAll()};$('#copyStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack]))return;clipboardStep=cloneData(currentStepObj());toast('Step copied')};$('#pasteStep').onclick=()=>{if(isPitchedTrack(tracks()[selectedTrack])||stepLocked())return;if(!clipboardStep)return toast('Clipboard step empty');checkpoint('Paste step');Object.assign(currentStepObj(),cloneData(clipboardStep));renderAll()};$('#auditionStep').onclick=auditionSelectedStep}
 async function auditionSelectedStep(){if(!await ensureAudio())return toast('Audio is blocked. Tap again.');const tr=tracks()[selectedTrack];if(tr.mute)return toast('This track is muted');syncTrackBuses();if(isPitchedTrack(tr)){const ns=notesAtStart(tr,selectedStep);if(!ns.length)return toast('Add a note in the inline piano roll');ns.forEach(n=>hit(ctx,tr,ctx.currentTime+.015,noteVelocity(n.velocity),n.pitch,null,0,selectedTrack,tracks(),true,n.length*secondsPerStep()));return}const st=currentStepObj();hit(ctx,tr,ctx.currentTime+.015,[.5,.45,.72,1][st.v||2],resolvedNote(tr,selectedTrack,st,selectedStep),null,st.slice||0,selectedTrack,tracks(),true)}
@@ -1483,7 +1545,7 @@ function endPaint(){
 }
 
 function clearPattern(p=currentPattern){state.patterns[p].forEach(tr=>{if(tr.locked)return;tr.steps.forEach(st=>Object.assign(st,stepTemplate()));tr.noteEvents=[]})}
-function blankLoop(){const ts=tracks(),hasContent=t=>t.steps.some(st=>st.v)||noteEvents(t).length,writable=ts.filter(t=>!t.locked),hasNotes=writable.some(hasContent),lockedHas=ts.some(t=>t.locked&&hasContent(t));if(!hasNotes)return toast(lockedHas?'Unlocked tracks are blank · locked tracks kept':'Loop is already blank');checkpoint('Blank loop');clearPattern();renderAll();toast(ts.some(t=>t.locked)?'Blank loop · locked tracks kept':'Blank loop')}
+function blankLoop(){const ts=tracks(),hasContent=t=>t.steps.some(st=>st.v)||noteEvents(t).length,writable=ts.filter(t=>!t.locked),hasNotes=writable.some(hasContent),lockedHas=ts.some(t=>t.locked&&hasContent(t));if(!hasNotes)return toast(lockedHas?'Unlocked tracks are blank · locked tracks kept':'Loop is already blank');if(!confirm('Clear this part? Unsaved edits will be lost.'))return;checkpoint('Blank loop');clearPattern();renderAll();toast(ts.some(t=>t.locked)?'Blank loop · locked tracks kept':'Blank loop')}
 function setStep(t,k,v=2,p=1){const tr=tracks()[t];if(!tr||tr.locked)return;if(isPitchedTrack(tr)){const sc=scaleNotes($('#key').value,$('#scale').value),deg=(k+t)%sc.length,base=tr.role==='bass'?36:48,pitch=base+(t>10?12:0)+sc[deg];if(tr.role==='chord'){const third=base+sc[(deg+2)%sc.length]+((deg+2)>=sc.length?12:0),fifth=base+sc[(deg+4)%sc.length]+((deg+4)>=sc.length?12:0);[pitch,third,fifth].forEach(x=>addNote(tr,x,(k+STEPS)%STEPS,4,v,p,0))}else addNote(tr,pitch,(k+STEPS)%STEPS,1,v,p,0);return}const st=tr.steps[(k+STEPS)%STEPS];st.v=Math.max(st.v,v);st.p=p}
 function populateCurrentIdea(){
   const g=$('#genre').value,d=(+$('#density').value)/100,kick=arr=>arr.forEach(x=>setStep(0,x,3)),snare=arr=>arr.forEach(x=>setStep(1,x,3));
@@ -2631,7 +2693,7 @@ async function init(){
   // while its panel still had display:none, leaving a blank editor. One call now
   // makes the visible panel and the active tab agree, before anything else paints.
   selectTab(initialTabName());
-  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';commitBpm($('#bpm').value);migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();bindGeneratorDialog();$('#gpuStatus').textContent=navigator.gpu?'[AVAILABLE / UNUSED]':'[NOT NEEDED]';renderAll();selectTab(initialTabName());updateAudioStatus();
+  keys.forEach(k=>$('#key').add(new Option(k,k)));$('#key').value='C';commitBpm($('#bpm').value);migrateState();await restoreInitialProject();bindSound();bindStepPanel();bindStepPop();bindAI();bindGeneratorDialog();renderAll();selectTab(initialTabName());updateAudioStatus();
   if(!navigator.requestMIDIAccess){$('#midiBtn').disabled=true;$('#midiBtn').textContent='MIDI n/a';$('#midiBtn').title='Web MIDI is not supported by this browser'}
   document.addEventListener('pointerdown',primeAudio,{once:true,passive:true});
   document.addEventListener('touchend',primeAudio,{once:true,passive:true});

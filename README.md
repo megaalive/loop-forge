@@ -34,6 +34,22 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 ## Riwayat perubahan (terbaru dulu)
 
+### Perbaikan 4.11.2 (UX sanity non-generator)
+
+Correction pass setelah Generator v4.11.1 stabil. Fokusnya masalah UX nyata di luar Generator: kontrol terlihat harus benar-benar berpengaruh, dan state tersembunyi tidak boleh membuat user terjebak. Tanpa redesign dan tanpa perubahan audio/Generator/schema.
+
+- **Easy mode tidak lagi meninggalkan panel yatim.** Dulu urutannya bisa `More → tab Step → Less`: tab `Step` disembunyikan `.advanced-only` tetapi panel `#stepedit` tetap tampil karena `setMode()` hanya mengganti label. Sekarang `setMode()` memastikan jika tab aktif tidak tersedia di Easy, selection dipindah ke **Sound** — selalu tepat satu tab visible active dan panelnya cocok (`selectTab()` tetap satu sumber kebenaran).
+- **Lock/Solo aktif tetap bisa dilepas di Easy.** CSS dulu menyembunyikan `.lock` dan `.warn` secara unconditional, sehingga track yang terkunci/solo kehilangan kontrol untuk membatalkannya. Sekarang hanya **Lock/Solo yang non-aktif** yang disembunyikan (`:not(.on)`); Lock/Solo yang aktif tetap terlihat dan bisa di-klik. Mute tidak berubah, dan state lock/solo tidak pernah ikut di-reset hanya karena mode berubah.
+- **Sound panel jujur per instrument (progressive disclosure).** Helper `applySoundVisibility()` menyembunyikan kontrol sesuai `tr.type` yang benar-benar dibaca `hit()`: **Tune** hanya untuk `synth`/`tom`/`sample`; blok **Osc A/B, mix, FM, filter, ADSR** hanya untuk `synth`; blok **file/mode/waveform/slice pads** hanya untuk `sample`. Name/Instrument/**Hear this sound** selalu tampil. Mengganti Instrument langsung me-refresh visibility tanpa reload. Hint **load sample** untuk sample track tanpa buffer tetap ada, dan gesture file-picker tidak rusak.
+- **Step panel jujur.** Tab Step tetap Advanced, tetapi tidak lagi memajang field yang audio path tidak pakai: **Velocity/Probability/Microtiming** tetap untuk track step-grid; **Sample slice** hanya untuk `sample`; **MIDI note** (note override) hanya untuk non-pitched `synth` — satu-satunya kasus `hit()` membaca `noteOverride` di jalur step-grid. Pitched synth tetap memakai inline notes seperti sebelumnya.
+- **Kolom nama track sticky.** Saat sequence di-scroll horizontal, label track dan header **SOUND** tetap terlihat di kiri (CSS `position:sticky;left:0`, bukan duplikasi DOM/grid). Background label opaque dan mengikuti state row (default/hover/selected) sehingga step tidak menembus; `z-index` kecil sehingga tidak menutupi modal/popover. Desktop tidak regress.
+- **Label BPM & Swing kembali di mobile.** Pada `max-width:520px` label dulu hilang meninggalkan angka/slider saja. Sekarang label `BPM` dan `SWING` tetap terlihat (topbar boleh wrap).
+- **Blank loop aman.** Jika part writable yang aktif sudah berisi, muncul `confirm('Clear this part? …')` lebih dulu (memakai dialog browser yang sama seperti **Start over**). **Cancel = nol mutasi** (tanpa checkpoint/history), Confirm tetap seperti sekarang (track terkunci dipertahankan). Loop kosong tetap hanya memberi toast tanpa confirm.
+- **Onboarding pitched track jujur.** Copy onboarding tidak lagi generik "Tap squares", melainkan menyebut perbedaan: *Drums: tap squares. Melodies: tap a square to open notes.* Di Easy, helper inline-note yang advanced (chord shape, Snap all to scale, ide nada, Keep notes in scale) disembunyikan, tetapi basic note editing (piano grid) tetap ada; semua helper kembali di Advanced. Semantics direct-pattern/noteEvents tidak diubah.
+- **WEBGPU dihapus dari status bar.** Segment `WEBGPU [OPTIONAL]/[AVAILABLE / UNUSED]/[NOT NEEDED]` dan dead init `gpuStatus` dihapus; tidak ada branding pengganti. WebGPU memang tidak dipakai di path produk.
+- **Tab sidebar rapi saat stacked.** Pada `<=900px` sidebar pindah di bawah workspace; `.tabs` tidak lagi sticky di layout stacked (dulu bisa menyelinap di balik topbar sticky), sementara desktop tetap sticky.
+- Invariant tetap: **algoritma musik, native/LLM generator, fill gaps, transport BPM, audio scheduler, WAV/MIDI, project/share/export schema, LocalExecutor, AI schema/provider/key, dan typed operations tidak disentuh.** `APP_VERSION` di-bump ke **4.11.2**; project schema tetap **5**.
+
 ### Perbaikan 4.11.1 (UX sanity generator)
 
 Pass ini **bukan penambahan kemampuan musik**. Prinsipnya: kontrol yang terlihat harus benar-benar berpengaruh, dan kontrol yang tampak seperti pilihan tidak boleh diam-diam mengubah project.
@@ -248,4 +264,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.11.1**.
+Versi saat ini: **4.11.2**.
