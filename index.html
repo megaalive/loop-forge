@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.9.5 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.9.6 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.9.5 — live BPM transport ===== */
+/* ===== LOOPFORGE-16 v4.9.6 — authoritative BPM ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -547,7 +547,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.9.5', STEPS=16, TRACKS=16;
+const APP_VERSION='4.9.6', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -1724,7 +1724,7 @@ function duckOffline(buses,ts,when){
   })
 }
 async function renderOffline(onlyTrack=null){
-  const chain=parseChain(),bpm=+$('#bpm').value||112,stepSec=60/bpm/4,dur=chain.length*16*stepSec+2.5,ac=new OfflineAudioContext(2,Math.ceil(44100*dur),44100);
+  const chain=parseChain(),bpm=transportBpm,stepSec=60/bpm/4,dur=chain.length*16*stepSec+2.5,ac=new OfflineAudioContext(2,Math.ceil(44100*dur),44100);
   const offMaster=ac.createGain();offMaster.gain.value=master?master.gain.value:.82;offMaster.connect(ac.destination);
   const echoOn=clamp((+$('#echo').value||0)/100,0,1);
   if(echoOn>0){const es=ac.createGain();es.gain.value=echoOn;const dl=ac.createDelay(1.2);dl.delayTime.value=echoDelay?echoDelay.delayTime.value:.28;const fb=ac.createGain();fb.gain.value=echoFb?echoFb.gain.value:.34;const wet=ac.createGain();wet.gain.value=echoWet?echoWet.gain.value:.55;offMaster.connect(es);es.connect(dl);dl.connect(fb);fb.connect(dl);dl.connect(wet);wet.connect(ac.destination)}
@@ -1780,7 +1780,7 @@ function midiTrackBytes(events,name){
   return [0x4D,0x54,0x72,0x6B,(len>>>24)&255,(len>>>16)&255,(len>>>8)&255,len&255,...track]
 }
 function buildMidiBlob(){
-  const chain=parseChain(),ppq=96,stepTicks=ppq/4,bpmVal=Math.max(20,+$('#bpm').value||112);
+  const chain=parseChain(),ppq=96,stepTicks=ppq/4,bpmVal=transportBpm;
   const secPerStep=60/bpmVal/4,ticksPerMs=stepTicks/(secPerStep*1000),sw=(+$('#swing').value||0)/100;
   const micros=Math.round(60000000/bpmVal);
   const mel=[0,1,2,3,4,5,6,7,8,10,11,12,13,14,15];
@@ -1846,15 +1846,17 @@ async function init(){
   $('#audioBtn').onclick=async()=>{const ok=await ensureAudio();if(ok){audioProbe();toast('Audio enabled')}else toast('Audio is still blocked')};$('#midiBtn').onclick=enableMidi;$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;
   // One undo transaction per edit gesture. The snapshot is taken once at the
   // start of the gesture (focus/pointerdown); repeated ArrowUp/Down never adds more.
+  const bpmEl=$('#bpm');
   let tempoGestureOpen=false;
   const beginTempoGesture=()=>{if(tempoGestureOpen)return;tempoGestureOpen=true;checkpoint('Tempo')};
-  const endTempoGesture=()=>{tempoGestureOpen=false};
-  const bpmEl=$('#bpm');
+  // On blur/change, if the field is invalid/partial, snap it back to the committed
+  // tempo so the UI never disagrees with what is actually playing/exporting.
+  const endTempoGesture=()=>{tempoGestureOpen=false;if(!commitBpm(bpmEl.value))bpmEl.value=transportBpm};
   bpmEl.addEventListener('pointerdown',beginTempoGesture);
   bpmEl.addEventListener('focus',beginTempoGesture);
   bpmEl.addEventListener('blur',endTempoGesture);
   bpmEl.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(e.key))beginTempoGesture()});
-  bpmEl.addEventListener('change',()=>{endTempoGesture();commitBpm(bpmEl.value)});
+  bpmEl.addEventListener('change',endTempoGesture);
   bpmEl.addEventListener('input',()=>{commitBpm(bpmEl.value);markDirty()});
   const swingEl=$('#swing');
   swingEl.addEventListener('pointerdown',()=>checkpoint('Swing'));

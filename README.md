@@ -103,6 +103,12 @@ Opsional, ada di **More → AI**. Model bahasa hanya menerjemahkan niat manusia 
 - **Lock selalu menang**; `preserve` dihormati.
 - **Tanpa fallback diam-diam**: kalau AI gagal atau output ditolak, tidak ada yang diterapkan. Tombol generator lokal tetap tersedia.
 
+### Perbaikan 4.9.6 (BPM otoritatif di semua jalur)
+
+- **Export WAV dan MIDI ikut memakai `transportBpm`.** Sebelumnya `renderOffline()` (`+$('#bpm').value||112`) dan `buildMidiBlob()` (`Math.max(20,...)`) masih membaca DOM mentah, jadi input parsial seperti `"8"` bisa menghasilkan WAV 8 BPM (sangat panjang) atau MIDI 20 BPM meski transport realtime tetap 112. Sekarang hanya `transportBpm` yang jadi sumber tempo.
+- **Tidak ada lagi konsumen tempo yang membaca `#bpm.value`** selain load project, `commitBpm` saat init, dan elemen UI editor.
+- **UI tidak lagi berbohong**: saat blur/change, bila field invalid/parsial, field dipulihkan ke `transportBpm` sehingga yang terlihat sama dengan yang dimainkan/diekspor.
+
 ### Perbaikan 4.9.5 (transport BPM live)
 
 - **Scheduler tidak lagi membaca BPM mentah dari DOM.** Ditambah `transportBpm` terpisah; `secondsPerStep()` memakai nilai itu. Input angka hanya boleh meng-*commit* nilai lengkap dalam rentang **40..240**.
@@ -157,4 +163,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.9.5**.
+Versi saat ini: **4.9.6**.
