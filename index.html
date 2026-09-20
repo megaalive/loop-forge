@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.11.0 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.11.1 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.11.0 — generator dialog ===== */
+/* ===== LOOPFORGE-16 v4.11.1 — generator dialog ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -604,10 +604,12 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 
           <!-- New idea -->
           <div class="gen-sec" id="genNewUI">
-            <div class="gen-h">Feel</div>
-            <div class="row">
-              <label class="control">Style<select id="genre"><option>Techno</option><option>House</option><option>Dark Ambient</option><option>Breakbeat</option><option>Trap</option><option>Funk</option><option>Jaipongan-ish</option><option>Minimal</option></select></label>
-              <label class="control">Simple ↔ Busy<input id="density" type="range" min="10" max="90" value="50"></label>
+            <div id="genFeelRow">
+              <div class="gen-h">Feel</div>
+              <div class="row">
+                <label class="control">Style<select id="genre"><option>Techno</option><option>House</option><option>Dark Ambient</option><option>Breakbeat</option><option>Trap</option><option>Funk</option><option>Jaipongan-ish</option><option>Minimal</option></select></label>
+                <label class="control">Simple ↔ Busy<input id="density" type="range" min="10" max="90" value="50"></label>
+              </div>
             </div>
             <div class="row">
               <label class="control">Key<select id="key"></select></label>
@@ -690,7 +692,8 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
               </select></label>
               <label class="control">Seed<input id="genSeed" type="number" min="0" max="999999999" value="1080"></label>
             </div>
-            <div class="gen-hint">With text in “Local text idea”, Generate uses it (and the Change target) instead of the style sliders.</div>
+            <div class="gen-inline" id="genLocalActive">Local text idea is active — Generate will use this text and the Change target instead of Style/Simple↔Busy.</div>
+            <div class="gen-hint">Available only for New idea on the current part. Leave it empty to use the Style sliders.</div>
           </div>
           <div class="gen-h" style="margin-top:10px">Track tools (selected track)</div>
           <div class="row"><label class="control">Pulses<input id="euclidPulses" type="number" min="0" max="16" value="5"></label><label class="control">Steps<input id="euclidSteps" type="number" min="1" max="16" value="16"></label></div>
@@ -752,7 +755,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.11.0', STEPS=16, TRACKS=16;
+const APP_VERSION='4.11.1', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];
@@ -2059,8 +2062,13 @@ function aiApply(){
   setAiPhase('applied','Applied via local generator · '+describeDecision(d)+' · '+res.applied+' track(s). One Undo reverts it.')
 }
 function switchProfile(id){
-  invalidateAiRequests();                       // abort any in-flight request for the old profile
-  aiProposal=null;aiTestedOk=false;$('#aiSent').textContent='—';$('#aiProposal').textContent='—';
+  // ONE lifecycle for every profile change (selector change, add, remove).
+  // It must always: invalidate/abort in-flight requests, drop the old proposal,
+  // clear the raw preview, reset the tested flag, then bind the new profile's own
+  // state. Never leak a key or a proposal across profiles.
+  invalidateAiRequests();                       // bump request id + abort controller
+  aiProposal=null;aiTestedOk=false;
+  $('#aiSent').textContent='—';$('#aiProposal').textContent='—';
   ProfileStore.activeId=id;ProfileStore.save();
   aiPhase=SecretStore.get(id)?'ready':'nokey';
   loadProfileIntoForm();refreshProfileSelect();setAiPhase(aiPhase);
@@ -2080,7 +2088,14 @@ function bindAI(){
     if(!round.ok){$('#aiEndpointWarn').style.display='block';$('#aiEndpointWarn').textContent='Endpoint not saved: '+round.error;return}
     ProfileStore.update(ProfileStore.activeId,{name:$('#aiName').value.trim()||'Connection',endpoint:round.url,model:$('#aiModel').value.trim()});
     aiTestedOk=false;                            // config changed → connection no longer verified
-    refreshProfileSelect();loadProfileIntoForm()
+    refreshProfileSelect();loadProfileIntoForm();
+    // Refresh the compact summary + state badge IMMEDIATELY (no stale "Connection OK",
+    // and name/model/endpoint shown live) — no need to wait for another refresh.
+    syncConnState();
+    const cn=$('#genConnName'),cm=$('#genConnModel'),p=aiActiveProfile();
+    if(cn)cn.textContent=p.name;
+    if(cm)cm.textContent=p.endpoint+' · '+p.model;
+    refreshAiUI();
   };
   $('#aiName').addEventListener('change',saveCfg);
   $('#aiModel').addEventListener('change',saveCfg);
@@ -2088,7 +2103,13 @@ function bindAI(){
   $('#aiAddProfile').onclick=()=>{
     const p=ProfileStore.add({name:'New connection',endpoint:'https://api.openai.com/v1/chat/completions',model:'gpt-4o-mini'});
     if(!p)return toast('Could not add connection');
-    refreshProfileSelect();loadProfileIntoForm();refreshAiUI();toast('Connection added')
+    // Route through the SAME lifecycle as switching: this aborts any in-flight
+    // request, clears the old proposal/preview, resets aiTestedOk and binds the
+    // new profile's own key state — so a late response for the old profile can
+    // never populate the new one, and no key/proposal leaks across profiles.
+    refreshProfileSelect();
+    switchProfile(p.id);
+    toast('Connection added')
   };
   $('#aiRemoveProfile').onclick=()=>{
     const p=aiActiveProfile();
@@ -2111,12 +2132,21 @@ let genMode='new';                            // Native: 'new' | 'variation'
 // Scope is authoritative: it alone decides Current vs A–D. There is deliberately
 // NO separate "Generate A–D" button — one footer CTA reflects engine + scope + mode.
 function genScope(){return $('#genScope').value==='all'?'all':'current'}
-function openLLMResult(open){
+// Technical details disclosure: progressive disclosure means raw request/response
+// lives here, COLLAPSED by default. Asking the model must populate the raw panes
+// but must NEVER force the disclosure open — the user's own open/closed choice is
+// respected. This function therefore only keeps the element present; it never
+// touches `.open` unless explicitly asked to.
+function openLLMResult(){
   const box=$('#genLLMResult');if(!box)return;
-  box.open=open!==false;
+  if(genEngine==='llm')box.style.display='block';
 }
-// Native's local-text capability lives in More/Tools (kept, not removed).
-function nativePrompt(){const el=$('#genPromptLocal');return el?el.value.trim():''}
+// Native's local-text capability lives in More/Tools. It is ONLY authoritative
+// in Native + New idea + Current. In A–D and Variation the block is hidden and
+// its (possibly stale) text must not influence routing or seeds.
+function nativeLocalTextActive(){return genEngine==='native'&&genMode==='new'&&genScope()==='current'}
+function nativeLocalTextRaw(){const el=$('#genPromptLocal');return el?el.value.trim():''}
+function nativePrompt(){return nativeLocalTextActive()?nativeLocalTextRaw():''}
 function nextPartName(){const order=['A','B','C','D'];return order[(order.indexOf(currentPattern)+1)%4]}
 function setFootStatus(text,kind){
   const el=$('#genFootStatus');if(!el)return;
@@ -2201,7 +2231,20 @@ function syncGenUI(){
   const varUI=$('#genVarUI');if(varUI)varUI.style.display=isVar?'':'none';
   // Native-only generation controls inside More stay hidden while LLM is selected;
   // the shared track tools (Euclid/Humanize/Fill gaps) remain available.
-  const moreNative=$('#genMoreNative');if(moreNative)moreNative.style.display=llm?'none':'';
+  // The local-text block is authoritative ONLY in Native + New idea + Current, so
+  // hide it (and its Change target) everywhere else instead of letting hidden stale
+  // text look like it still matters.
+  const moreNative=$('#genMoreNative');
+  const localActive=nativeLocalTextActive();
+  if(moreNative)moreNative.style.display=localActive?'':'none';
+  const localNotice=$('#genLocalActive');
+  const localTextOn=localActive&&nativeLocalTextRaw().length>0;
+  if(localNotice)localNotice.classList.toggle('show',localTextOn);
+  // When the local-text path is active, runGen() reads the text + Change target and
+  // IGNORES Style/Simple↔Busy. Showing them "as if active" would be dishonest, so
+  // hide that Feel row entirely while the local-text path is in charge.
+  const feelRow=$('#genFeelRow');
+  if(feelRow)feelRow.style.display=localTextOn?'none':'';
   $$('#genMode button').forEach(b=>{const on=b.dataset.mode===genMode;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false')});
   const from=$('#genVarFrom'),to=$('#genVarTo');
   if(from)from.textContent=currentPattern;
@@ -2260,8 +2303,8 @@ function setGenEngine(engine){
   else refreshAiUI();
   syncGenUI();
 }
-// Native generation routing. The local-text box (More) is optional: New idea with
-// no text uses the style sliders, exactly as the controls promise.
+// Native generation routing. In A–D and Variation the local-text block is hidden
+// and never consulted. Only New idea + Current may choose the local-text path.
 function runNativeGenerate(scope){
   if(genMode==='variation'){variationToNext();return}
   if(scope==='all'){generateAllParts();return}
@@ -2290,10 +2333,12 @@ function bindGeneratorDialog(){
   // Mode selection: only selects. It never checkpoints, mutates or generates.
   $$('#genMode button').forEach(b=>b.onclick=()=>{genMode=b.dataset.mode==='variation'?'variation':'new';syncGenUI()});
   $('#genRunPrimary').onclick=runPrimaryCTA;
-  $('#genScope').addEventListener('change',()=>{syncGenCTA();syncScopeHelp()});
+  $('#genScope').addEventListener('change',()=>{syncGenUI();syncScopeHelp()});
   $('#genActionFill').onclick=()=>fillGaps();       // tool, not a generation mode
   const cfg=$('#genConnConfigure');if(cfg)cfg.onclick=()=>{const box=$('#aiBox');if(box)box.open=!box.open};
   const cp=$('#genPrompt');if(cp)cp.addEventListener('input',()=>{syncPromptValidation();syncGenCTA()});
+  // Local text idea drives which Native path runs, so it must refresh the whole UI state.
+  const lp=$('#genPromptLocal');if(lp)lp.addEventListener('input',()=>syncGenUI());
   const keySel=$('#key'),scSel=$('#scale');
   if(keySel)keySel.addEventListener('change',syncGenUI);
   if(scSel)scSel.addEventListener('change',syncGenUI);

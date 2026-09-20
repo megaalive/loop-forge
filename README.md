@@ -53,7 +53,17 @@ Pass ini **bukan penambahan kemampuan musik**. Prinsipnya: kontrol yang terlihat
 - **Feedback dekat CTA.** Baris status di footer menampilkan waiting/error/proposal/applied sehingga user tidak perlu scroll ke blok connection.
 - **Toast di atas modal.** `.toast z-index` dinaikkan dari 99 menjadi 200 (> `130` modal) agar notifikasi global tidak tersembunyi di belakang modal; validasi form utama tetap **inline**.
 - **Responsif** 375/768/1280: tidak ada horizontal overflow, CTA footer terjangkau, segmented mode tidak terpotong, modal scroll wajar.
-- Invariant tetap: Native default & full offline; LLM hanya menghasilkan typed decision; semua mutasi tetap ditulis LocalExecutor/code; transport BPM, audio, WAV/MIDI, dan schema project/share/export tidak berubah. `APP_VERSION` tidak di-bump pada pass UX ini.
+- Invariant tetap: Native default & full offline; LLM hanya menghasilkan typed decision; semua mutasi tetap ditulis LocalExecutor/code; transport BPM, audio, WAV/MIDI, dan schema project/share/export tidak berubah.
+
+#### Koreksi lanjutan 4.11.1 (cross-state)
+
+Fresh audit menemukan lima bug lintas-state yang belum tertangkap suite; pass ini hanya memperbaikinya (bukan redesign, bukan fitur musik baru).
+
+- **Local text idea bukan lagi "hidden mode ketiga".** Teks lokal hanya authoritative pada **Native + New idea + Current**. Di **A–D** dan **Variation** blok Local text idea + `Change` **disembunyikan**, dan teks lama yang tersembunyi **tidak lagi memengaruhi routing maupun seed** Variation. Saat teks lokal aktif, baris **Style / Simple↔Busy disembunyikan** (karena `runGen()` mengabaikannya) dan muncul notice **"Local text idea is active…"** — jadi kontrol yang terlihat selalu mencerminkan handler yang benar-benar berjalan.
+- **`New connection` memakai lifecycle switch yang sama** dengan ganti profil: membatalkan request in-flight (`AbortController` + request-id), menghapus proposal lama, mengosongkan preview mentah, reset `aiTestedOk`, lalu mengikat state key profil baru. Response lama yang datang terlambat tidak bisa mengisi UI profil baru, dan key/proposal tidak bocor antar-profil.
+- **Edit config langsung mencabut "Connection OK".** Setelah Test sukses, mengubah name/endpoint/model langsung me-refresh badge (→ `Key set` / not-tested) dan summary (`name`/`model`/`endpoint`) tanpa menunggu refresh lain.
+- **Technical details tidak auto-open saat Ask.** `aiAsk()` mengisi `aiSent`/`aiProposal` mentah tetapi **tidak** memaksa disclosure terbuka; pilihan buka/tutup manual user dihormati. Kartu Proposal human-readable tetap primary.
+- **Version consistency:** `APP_VERSION` di-bump ke **4.11.1** (judul, komentar CSS, dan nama file export ikut konsisten otomatis). Project schema version tetap **5** (tidak diubah).
 
 ### Baru di 4.11.0 (Generator dialog)
 
@@ -226,4 +236,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.11.0**.
+Versi saat ini: **4.11.1**.
