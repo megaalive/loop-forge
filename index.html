@@ -812,10 +812,11 @@ function escHtml(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<
 let ctx=null, master=null, scheduler=null, nextNoteTime=0, currentStep=0, lastPlayStep=-1, isPlaying=false, isStarting=false, transportEpoch=0;
 let selectedTrack=0, selectedStep=0, currentPattern='A', playbackPattern='A', songMode=false, chainPos=0;
 let expandedTracks=new Set();
-// Track index whose inline piano was on screen at the end of the last renderSeq().
-// Used to detect a fresh open (so we ease it into view once) without touching every
-// open call-site or re-scrolling on unrelated re-renders.
-let lastPianoTrack=-1;
+// Track index whose inline note editor the user just asked to open. Set on the user
+// action path (step click / ♪ toggle open / step-pop "notes"), then consumed once by
+// renderSeq() to ease THAT exact editor into view. Kept as an explicit intent rather
+// than inferred from render output, so it stays correct with several editors open.
+let pendingPianoScrollTrack=-1;
 let metro=false, recordArm=false, typingMode=false, midiAccess=null, clipboardStep=null, popOpen=false, paintDrag=null, forgeKeys=null;
 let sampleBuffers=Array(TRACKS).fill(null), history=[], future=[];
 let iosAudioBridge=null, iosAudioBridgeUrl=null;
@@ -916,7 +917,7 @@ function setMode(easy){
 }
 function currentStepObj(){return tracks()[selectedTrack].steps[selectedStep]}
 function isPitchedTrack(tr){return tr&&tr.type==='synth'&&['bass','chord','melody','arp','texture'].includes(tr.role)}
-function toggleTrackNotes(i){const tr=tracks()[i];if(!isPitchedTrack(tr))return toast('Notes are available on pitched synth tracks');selectedTrack=i;if(expandedTracks.has(i))expandedTracks.delete(i);else expandedTracks.add(i);renderAll()}
+function toggleTrackNotes(i){const tr=tracks()[i];if(!isPitchedTrack(tr))return toast('Notes are available on pitched synth tracks');selectedTrack=i;if(expandedTracks.has(i))expandedTracks.delete(i);else{expandedTracks.add(i);pendingPianoScrollTrack=i}renderAll()}
 function syncPianoToggle(){const b=$('#pianoToggle');if(!b)return;const ok=isPitchedTrack(tracks()[selectedTrack]);b.disabled=!ok;b.textContent=ok&&expandedTracks.has(selectedTrack)?'Hide notes':'Notes';b.classList.toggle('primary',ok&&expandedTracks.has(selectedTrack))}
 function noteEvents(tr){return Array.isArray(tr.noteEvents)?tr.noteEvents:(tr.noteEvents=[])}
 function notesAtStart(tr,step){return noteEvents(tr).filter(n=>n.start===step)}
@@ -1338,7 +1339,7 @@ function migrateTrack(tr,i){const d=trackTemplate(i),hadEvents=Array.isArray(tr.
 function migrateState(){for(const p of ['A','B','C','D']){if(!state.patterns[p])state.patterns[p]=Array.from({length:TRACKS},(_,i)=>trackTemplate(i));state.patterns[p]=state.patterns[p].slice(0,TRACKS);while(state.patterns[p].length<TRACKS)state.patterns[p].push(trackTemplate(state.patterns[p].length));state.patterns[p]=state.patterns[p].map(migrateTrack)}}
 
 function renderInlinePiano(tr,i){
-  const wrap=document.createElement('div');wrap.className='inline-piano';
+  const wrap=document.createElement('div');wrap.className='inline-piano';wrap.dataset.track=String(i);
   const side=document.createElement('div');side.className='inline-piano-side';side.innerHTML='<b>'+escHtml(tr.name)+'</b>polyphonic notes<small>Click = add/remove · drag = note length</small>';wrap.appendChild(side);
   side.appendChild(buildNoteTools(tr,i));
   const scroll=document.createElement('div');scroll.className='inline-piano-scroll';
@@ -1374,19 +1375,19 @@ function buildNoteTools(tr,i){
 function beginNoteGesture(e,i,pitch,step){if(e.button!==0)return;const tr=tracks()[i];if(tr.locked){toast('Track is locked');return}e.preventDefault();selectedTrack=i;selectedStep=step;if(autoSnap)pitch=snapToScale(pitch);const existing=noteCovering(tr,pitch,step),origin=step;const finish=up=>{document.removeEventListener('pointerup',finish);const el=document.elementFromPoint(up.clientX,up.clientY)?.closest?.('.piano-cell[data-track][data-pitch][data-step]');let end=origin;if(el&&+el.dataset.track===i&&+el.dataset.pitch===pitch)end=+el.dataset.step;checkpoint(existing?'Edit note':'Add note');if(existing){if(end===origin)removeNote(tr,existing);else existing.length=clamp(end-existing.start+1,1,STEPS-existing.start)}else{const start=Math.min(origin,end),length=Math.abs(end-origin)+1;addNote(tr,pitch,start,length,2,1,0)}renderAll()};document.addEventListener('pointerup',finish,{once:true})}
 
 function renderSeq(){
-  let openedPianoIdx=-1;
   const root=$('#seq');root.innerHTML='';const head=document.createElement('div');head.className='seq-head';head.innerHTML='<div>SOUND</div>'+Array.from({length:16},(_,i)=>'<div class="step-index" data-step="'+i+'" style="text-align:center">'+(i+1)+'</div>').join('');root.appendChild(head);
   tracks().forEach((tr,i)=>{const row=document.createElement('div');row.className='track'+(i===selectedTrack?' selected':'');row.classList.toggle('locked',!!tr.locked);row.dataset.role=tr.role||'';const lab=document.createElement('div');lab.className='tracklabel';const noteButton=isPitchedTrack(tr)?'<button class="mini pitch-toggle '+(expandedTracks.has(i)?'on':'')+'" data-act="notes" title="'+(expandedTracks.has(i)?'Hide':'Show')+' notes" aria-label="'+(expandedTracks.has(i)?'Hide':'Show')+' notes for '+escHtml(tr.name)+'">♪</button>':'';const sampleHint=(tr.type==='sample'&&!sampleBuffers[i])?'<button class="trackhint" data-act="load" title="No sample loaded yet — click to load one">load sample</button>':'';lab.innerHTML='<span class="tracknum">'+String(i+1).padStart(2,'0')+'</span><span class="trackname">'+escHtml(tr.name)+'</span><span class="trackrole">'+escHtml(tr.role||'')+'</span>'+sampleHint+'<span class="simple-track-actions">'+noteButton+'<button class="mini lock '+(tr.locked?'on':'')+'" data-act="lock" title="Lock this row">L</button><button class="mini '+(tr.mute?'on':'')+'" data-act="mute" title="Mute this row">M</button><button class="mini warn '+(tr.solo?'on':'')+'" data-act="solo" title="Hear only this row">S</button></span>';lab.addEventListener('click',e=>{if(e.target.dataset.act==='notes'){toggleTrackNotes(i);return}if(e.target.dataset.act==='load'){selectedTrack=i;selectTab('sound');renderAll();$('#sampleFile').click();return}if(e.target.dataset.act==='lock'){checkpoint('Lock');tr.locked=!tr.locked;renderAll();return}if(e.target.dataset.act==='mute'){toggleTrackMute(tr,i);return}if(e.target.dataset.act==='solo'||e.shiftKey){toggleTrackSolo(tr);return}selectedTrack=i;syncSoundPanel();syncStepPanel();renderAll()});row.appendChild(lab);
-    for(let k=0;k<STEPS;k++){const st=tr.steps[k],starts=isPitchedTrack(tr)?notesAtStart(tr,k):[],v=isPitchedTrack(tr)?(starts.length?Math.max(...starts.map(n=>n.velocity)):0):st.v,b=document.createElement('button');b.className='step '+(v?'v'+v:'')+(i===selectedTrack&&k===selectedStep?' selected-step':'');b.dataset.step=k;b.dataset.track=i;const fill=document.createElement('i');fill.className='fill';b.style.setProperty('--fill',Math.round(clamp(v,0,3)/3*100)+'%');b.appendChild(fill);if(forgeKeys&&forgeKeys.has(i+':'+k))b.classList.add('forged');b.dataset.prob=!isPitchedTrack(tr)&&st.p<1?Math.round(st.p*100)+'%':'';b.dataset.extra=isPitchedTrack(tr)?(starts.length>1?'×'+starts.length:starts.length===1?noteName(starts[0].pitch):''):(tr.type==='sample'&&tr.sliceMode?'S'+(st.slice+1):(st.shift?((st.shift>0?'+':'')+st.shift):''));b.setAttribute('aria-label',tr.name+', beat '+(k+1)+', '+(v?'on':'off'));b.title=isPitchedTrack(tr)?tr.name+' · step '+(k+1)+' · open notes':tr.name+' · beat '+(k+1);b.addEventListener('pointerdown',e=>{if(e.button!==0)return;beginPaint(e,i,k)});b.addEventListener('click',e=>{if(e.detail!==0)return;selectedTrack=i;selectedStep=k;if(isPitchedTrack(tr)){expandedTracks.add(i);renderAll();return}if(tr.locked){toast('Track is locked');return}checkpoint('Step');st.v=st.v?0:2;renderAll()});b.addEventListener('contextmenu',e=>{e.preventDefault();if(popOpen)return;openStepPop(e.clientX,e.clientY,i,k)});row.appendChild(b)}root.appendChild(row);if(expandedTracks.has(i)&&isPitchedTrack(tr)){root.appendChild(renderInlinePiano(tr,i));openedPianoIdx=i}
+    for(let k=0;k<STEPS;k++){const st=tr.steps[k],starts=isPitchedTrack(tr)?notesAtStart(tr,k):[],v=isPitchedTrack(tr)?(starts.length?Math.max(...starts.map(n=>n.velocity)):0):st.v,b=document.createElement('button');b.className='step '+(v?'v'+v:'')+(i===selectedTrack&&k===selectedStep?' selected-step':'');b.dataset.step=k;b.dataset.track=i;const fill=document.createElement('i');fill.className='fill';b.style.setProperty('--fill',Math.round(clamp(v,0,3)/3*100)+'%');b.appendChild(fill);if(forgeKeys&&forgeKeys.has(i+':'+k))b.classList.add('forged');b.dataset.prob=!isPitchedTrack(tr)&&st.p<1?Math.round(st.p*100)+'%':'';b.dataset.extra=isPitchedTrack(tr)?(starts.length>1?'×'+starts.length:starts.length===1?noteName(starts[0].pitch):''):(tr.type==='sample'&&tr.sliceMode?'S'+(st.slice+1):(st.shift?((st.shift>0?'+':'')+st.shift):''));b.setAttribute('aria-label',tr.name+', beat '+(k+1)+', '+(v?'on':'off'));b.title=isPitchedTrack(tr)?tr.name+' · step '+(k+1)+' · open notes':tr.name+' · beat '+(k+1);b.addEventListener('pointerdown',e=>{if(e.button!==0)return;beginPaint(e,i,k)});b.addEventListener('click',e=>{if(e.detail!==0)return;selectedTrack=i;selectedStep=k;if(isPitchedTrack(tr)){expandedTracks.add(i);pendingPianoScrollTrack=i;renderAll();return}if(tr.locked){toast('Track is locked');return}checkpoint('Step');st.v=st.v?0:2;renderAll()});b.addEventListener('contextmenu',e=>{e.preventDefault();if(popOpen)return;openStepPop(e.clientX,e.clientY,i,k)});row.appendChild(b)}root.appendChild(row);if(expandedTracks.has(i)&&isPitchedTrack(tr))root.appendChild(renderInlinePiano(tr,i))
   });
-  if(openedPianoIdx>=0&&openedPianoIdx!==lastPianoTrack){const p=root.querySelector('.inline-piano');if(p)try{p.scrollIntoView({block:'nearest',inline:'nearest'})}catch(_){}}
-  lastPianoTrack=openedPianoIdx;
+  if(pendingPianoScrollTrack>=0){const p=root.querySelector('.inline-piano[data-track="'+pendingPianoScrollTrack+'"]');if(p)try{p.scrollIntoView({block:'nearest',inline:'nearest'})}catch(_){}pendingPianoScrollTrack=-1}
 }
 // Lightweight selected-track switch used inside the mixer so dragging a volume/pan
 // slider never triggers a full renderAll() (which would rebuild the row and drop the
-// gesture). It only re-tags the existing selected styling on the sequence rows and
-// the mixer strips, then refreshes the (possibly hidden) Sound/Step panel context.
-function selectTrackLight(i){if(i===selectedTrack)return;selectedTrack=i;$$('#seq > .track').forEach((r,k)=>r.classList.toggle('selected',k===i));$$('#mixerBody .mixer-row').forEach((r,k)=>r.classList.toggle('selected',k===i));syncSoundPanel();syncStepPanel()}
+// gesture). It re-tags every visible selected-track indicator in place - sequence row,
+// mixer strip, `.selected-step` on the current step, and the Sound/Step/Notes panel
+// context - so all of them agree immediately without a full render.
+function syncTrackSelectionLight(i){selectedTrack=i;$$('#seq > .track').forEach((r,k)=>r.classList.toggle('selected',k===i));$$('#mixerBody .mixer-row').forEach((r,k)=>r.classList.toggle('selected',k===i));$$('#seq .step').forEach(s=>s.classList.toggle('selected-step',+s.dataset.track===i&&+s.dataset.step===selectedStep));syncSoundPanel();syncStepPanel();syncPianoToggle()}
+function selectTrackLight(i){if(i===selectedTrack)return;syncTrackSelectionLight(i)}
 function renderMixer(){const b=$('#mixerBody');b.innerHTML='';tracks().forEach((tr,i)=>{const r=document.createElement('div');r.className='mixer-row'+(i===selectedTrack?' selected':'');r.dataset.track=String(i);r.innerHTML=`<span>${String(i+1).padStart(2,'0')}</span><input aria-label="volume" type="range" min="0" max="100" value="${Math.round(tr.volume*100)}"><input aria-label="pan" type="range" min="-100" max="100" value="${Math.round(tr.pan*100)}"><span title="${escHtml(tr.name)}">${escHtml(tr.name)}</span><button class="mini ${tr.mute?'on':''}">M</button><button class="mini warn ${tr.solo?'on':''}">S</button>`;const [vol,pan,m,so]=[r.children[1],r.children[2],r.children[4],r.children[5]];const pick=()=>selectTrackLight(i);r.addEventListener('pointerdown',pick);vol.onpointerdown=pan.onpointerdown=()=>{checkpoint('Mix');pick()};vol.oninput=()=>{tr.volume=vol.value/100;syncTrackBuses();markDirty()};pan.oninput=()=>{tr.pan=pan.value/100;syncTrackBuses();markDirty()};m.onclick=()=>{if(selectedTrack!==i)selectTrackLight(i);toggleTrackMute(tr,i)};so.onclick=()=>{if(selectedTrack!==i)selectTrackLight(i);toggleTrackSolo(tr)};const vm=document.createElement('i');vm.className='vmeter';r.appendChild(vm);b.appendChild(r)})}
 function waveformPeaks(buf,width){
   const cache=buf._peaks;
@@ -1488,7 +1489,7 @@ function bindStepPop(){
     if(a==='clear'){checkpoint('Clear step');Object.assign(st,stepTemplate());renderAll();renderStepPop();return}
     if(a==='copy'){clipboardStep=cloneData(st);toast('Step copied');return}
     if(a==='paste'){if(!clipboardStep)return toast('Clipboard step empty');checkpoint('Paste step');Object.assign(st,cloneData(clipboardStep));renderAll();renderStepPop();return}
-    if(a==='notes'){expandedTracks.add(selectedTrack);closeStepPop();renderAll();return}
+    if(a==='notes'){expandedTracks.add(selectedTrack);pendingPianoScrollTrack=selectedTrack;closeStepPop();renderAll();return}
   });
   p.addEventListener('input',e=>{
     const t=e.target,st=currentStepObj();
@@ -1511,7 +1512,7 @@ function setStepVisual(i,k){
 }
 function beginPaint(e,i,k){
   const tr=tracks()[i];selectedTrack=i;selectedStep=k;
-  if(isPitchedTrack(tr)){expandedTracks.add(i);renderAll();return}
+  if(isPitchedTrack(tr)){expandedTracks.add(i);pendingPianoScrollTrack=i;renderAll();return}
   if(e.pointerType==='touch'){beginTouchStep(e,i,k);return}
   if(tr.locked){toast('Track is locked');return}
   e.preventDefault();
