@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>LOOPFORGE-16 v4.11.3 — Browser Music Workstation</title>
+<title>LOOPFORGE-16 v4.12.0 — Browser Music Workstation</title>
 <style>
-/* ===== LOOPFORGE-16 v4.11.3 — generator dialog ===== */
+/* ===== LOOPFORGE-16 v4.12.0 — generator dialog ===== */
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -50,8 +50,8 @@ button{cursor:pointer}
   --radius-lg:12px;
   --shadow:0 10px 28px rgba(0,0,0,.4);
   --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Consolas,Menlo,monospace;
-  --step-0:#16181b;
-  --step-0-alt:#1b1e22;
+  --step-0:#141619;
+  --step-0-alt:#1c2026;
   --step-1:#22301f;
   --step-2:#315029;
   --step-3:#67a93c;
@@ -62,8 +62,8 @@ button{cursor:pointer}
 /* ---------- topbar ---------- */
 .topbar{
   position:sticky;top:0;z-index:20;
-  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
-  padding:9px 14px;
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:8px 12px;
   background:rgba(10,11,13,.92);
   backdrop-filter:blur(14px) saturate(1.3);
   -webkit-backdrop-filter:blur(14px) saturate(1.3);
@@ -72,7 +72,7 @@ button{cursor:pointer}
 .brand{display:flex;align-items:baseline;gap:8px;margin-right:auto;font-size:15px;font-weight:700}
 .brand b{color:var(--accent);font-weight:800;letter-spacing:.01em}
 .brand small{font-size:10px;font-weight:600;color:var(--text-faint);letter-spacing:.04em}
-.transport{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.transport{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 
 .btn,.field{
   border:1px solid var(--border);
@@ -92,6 +92,13 @@ button{cursor:pointer}
 .btn.danger{color:var(--danger);border-color:transparent;background:transparent}
 .btn.danger:hover{border-color:var(--danger);background:var(--danger-soft)}
 #playBtn{min-width:88px;font-size:13px}
+/* Generate opens a dialog; keep it a clear creation action without competing
+   with Play, the single filled primary in the transport. */
+.btn.accent-cta{background:transparent;border-color:var(--accent-dim);color:var(--accent);box-shadow:none}
+.btn.accent-cta:hover{background:var(--accent-soft);border-color:var(--accent);filter:none}
+/* Soft vertical rule separating the make-music cluster from the input/system cluster. */
+.topbar-sep{display:none}
+@media (min-width:1100px){.topbar-sep{display:block;align-self:stretch;width:1px;background:var(--border);margin:2px 4px}}
 
 .field{display:flex;align-items:center;gap:6px;padding:5px 10px}
 .field input,.field select{background:transparent;border:0;color:var(--text);min-width:0;outline:none;font-weight:700}
@@ -106,7 +113,7 @@ button{cursor:pointer}
   color:var(--text-faint);
   font:11px/1.6 var(--mono);
 }
-.status-seg{padding:5px 12px;border-right:1px solid var(--border-soft)}
+.status-seg{padding:4px 10px;border-right:1px solid var(--border-soft)}
 .status-seg:last-child{border-right:0}
 .status strong{color:var(--accent-2);font-weight:600}
 .status-seg.viz-seg{display:flex;align-items:center;padding:2px 10px}
@@ -123,8 +130,8 @@ button{cursor:pointer}
 .panel .body{padding:10px}
 
 .tabs{position:sticky;top:0;z-index:8;display:flex;gap:4px;background:var(--surface-2);padding-bottom:8px;margin-bottom:2px;overflow:auto}
-.tab{flex:1;min-width:56px;text-align:center;white-space:nowrap}
-.tab.active{background:var(--surface-3);border-color:var(--border-strong);color:var(--text)}
+.tab{flex:1;min-width:56px;text-align:center;white-space:nowrap;color:var(--text-dim)}
+.tab.active{background:var(--surface-3);border-color:var(--border-strong);color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
 
 /* ---------- pattern bar ---------- */
 .patternbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:7px 9px;margin-bottom:9px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
@@ -136,7 +143,7 @@ button{cursor:pointer}
 
 /* ---------- sequencer grid (hero element) ---------- */
 .sequence-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2);box-shadow:inset 0 1px 0 rgba(255,255,255,.02)}
-.seq{min-width:970px}
+.seq{min-width:880px}
 .seq-head,.track{display:grid;grid-template-columns:175px repeat(16,1fr);gap:4px;align-items:center;padding:5px 7px}
 .seq-head{position:sticky;top:0;z-index:5;background:var(--surface-2);border-bottom:1px solid var(--border);color:var(--text-faint);font:10.5px/1 var(--mono);text-align:center;--seqcol-bg:var(--surface-2)}
 .seq-head>div:first-child{text-align:left;letter-spacing:.08em;font-weight:700}
@@ -145,10 +152,13 @@ button{cursor:pointer}
    so steps never show through. Stays below the modal (z-index 130) and popover (120). */
 .seq-head>div:first-child,.tracklabel{position:sticky;left:0;z-index:3;background:var(--seqcol-bg,var(--surface-2))}
 .seq-head>div:first-child{z-index:7}
+.seq-head .step-index[data-step="0"],.seq-head .step-index[data-step="4"],.seq-head .step-index[data-step="8"],.seq-head .step-index[data-step="12"]{color:var(--text-dim);font-weight:700}
 .track{border-bottom:1px solid var(--border-soft);min-height:34px;--seqcol-bg:var(--surface-2)}
 .track:last-child{border-bottom:0}
 .track:hover{--seqcol-bg:#16181c;background:rgba(255,255,255,.015)}
 .track.selected{--seqcol-bg:var(--surface-3);background:var(--surface-3)}
+.track.selected::before{width:3px;opacity:1}
+.track.selected .trackname{font-weight:750}
 .locked{opacity:.58}
 
 .tracklabel{height:28px;display:flex;align-items:center;gap:6px;min-width:0}
@@ -213,7 +223,7 @@ input[type=range]{padding:0!important;accent-color:var(--accent)}
 .mixer-row span{font-size:11px;color:var(--text-dim)}
 .mixer-row{position:relative;overflow:hidden}
 .mixer-row.selected{background:var(--surface-3)}
-.mixer-row.selected::before{content:'';position:absolute;left:0;top:5px;bottom:5px;width:2px;border-radius:2px;background:var(--accent);opacity:.85;pointer-events:none}
+.mixer-row.selected::before{content:'';position:absolute;left:0;top:5px;bottom:5px;width:3px;border-radius:2px;background:var(--accent);opacity:1;pointer-events:none}
 .vmeter{position:absolute;left:0;bottom:0;height:2px;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));opacity:.85;pointer-events:none;transition:width .06s linear}
 
 /* ---------- note cells ---------- */
@@ -249,7 +259,7 @@ input[type=range]{padding:0!important;accent-color:var(--accent)}
 .inline-piano-scroll::-webkit-scrollbar-track{background:transparent}
 .inline-piano-scroll::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:8px}
 .inline-piano-scroll::-webkit-scrollbar-thumb:hover{background:var(--text-faint)}
-.inline-piano-grid{min-width:780px}
+.inline-piano-grid{min-width:690px}
 .inline-piano-row{display:grid;grid-template-columns:36px repeat(16,1fr);gap:2px;margin-bottom:2px}
 .inline-piano-label{position:sticky;left:0;z-index:2;display:flex;align-items:center;justify-content:flex-end;padding-right:5px;background:#0b0c0e;color:var(--text-faint);font:9px var(--mono)}
 .inline-piano .piano-cell{height:15px;border-radius:3px}
@@ -281,15 +291,15 @@ details.morebox>.inside{padding:0 9px 9px}
 .pad:hover,.pad.active{border-color:var(--accent-2);color:var(--accent-2);background:var(--accent-2-soft)}
 
 /* ---------- welcome / hints ---------- */
-.welcome{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:9px;padding:10px 13px;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius-lg)}
+.welcome{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;padding:8px 12px;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius-lg)}
 .welcome strong{font-size:13px;font-weight:700}
-.welcome-steps{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px;color:var(--text-dim);font-size:11.5px}
+.welcome-steps{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px;color:var(--text-dim);font-size:11px}
 .welcome-steps span+span::before{content:'\2192';margin-right:6px;color:var(--text-faint)}
-.modehint{font-size:11px;color:var(--text-dim);padding:2px 2px 9px}
+.modehint{font-size:11px;color:var(--text-dim);padding:1px 2px 7px}
 .modehint b{color:var(--text)}
 
 /* ---------- footer / toast ---------- */
-.footer{border-top:1px solid var(--border);padding:7px 14px;color:var(--text-dim);display:flex;gap:12px;flex-wrap:wrap;font-size:11px}
+.footer{border-top:1px solid var(--border);padding:6px 12px;color:var(--text-dim);display:flex;gap:12px;flex-wrap:wrap;font-size:11px}
 .footer .easy-help{color:var(--text-dim)}
 kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text);background:var(--surface-3);font:10px var(--mono)}
 /* Toast must sit ABOVE the generator dialog (z-index 130) so a global safety-net
@@ -464,8 +474,9 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
       <div class="field"><span class="hide-sm">SWING</span><input id="swing" type="range" min="0" max="70" value="18"><span id="swingVal">18%</span></div>
       <div class="field advanced-only" title="Master echo send"><span>ECHO</span><input id="echo" type="range" min="0" max="100" value="0"><span id="echoVal">0%</span></div>
       <button id="scBtn" class="btn advanced-only" title="Sidechain: kick ducks the bass">Duck</button>
-      <button id="generateBtn" class="btn primary" title="Open the generator">Generate</button>
+      <button id="generateBtn" class="btn accent-cta" title="Open the generator">Generate</button>
       <button id="blankBtn" class="btn" title="Clear the current part and start empty">Blank loop</button>
+      <span class="topbar-sep advanced-only" aria-hidden="true"></span>
       <button id="typingBtn" class="btn advanced-only">Keys</button>
       <button id="audioBtn" class="btn" style="display:none">Enable audio</button>
       <button id="midiBtn" class="btn advanced-only">MIDI</button>
@@ -800,7 +811,7 @@ body.easy .mixer-row>span:nth-child(4){overflow:hidden;text-overflow:ellipsis;wh
 (() => {
 'use strict';
 
-const APP_VERSION='4.11.3', STEPS=16, TRACKS=16;
+const APP_VERSION='4.12.0', STEPS=16, TRACKS=16;
 const names=['KICK','SNARE','CLOSED HAT','OPEN HAT','CLAP','PERC','TOM','SUB BASS','BASS','CHORD','PLUCK','LEAD','ARP','TEXTURE','FX','SAMPLE'];
 const types=['kick','snare','hat','hat','clap','tom','tom','synth','synth','synth','synth','synth','synth','synth','synth','sample'];
 const notes=[36,38,42,46,39,48,45,36,43,52,60,67,72,55,79,60];

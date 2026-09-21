@@ -34,6 +34,17 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 ## Riwayat perubahan (terbaru dulu)
 
+### Baru di 4.12.0 — visual polish
+
+Polish visual tanpa redesign: alur kerja, mental model, dan kecepatan tetap sama, hanya hierarki dan ritme yang dirapikan. Tanpa framework, fitur, atau design language baru; tanpa perubahan audio, generator, data project, atau schema.
+
+- **Hierarki topbar lebih tenang.** Play tetap satu-satunya tombol primary yang terisi penuh; **Generate** kini bergaya aksen garis (membuka dialog, bukan aksi transport), jadi tidak lagi bersaing dengan Play. Padding dan gap topbar dirapikan sehingga topbar sedikit lebih pendek, dan sebuah garis pemisah halus memisahkan cluster membuat-musik dari cluster input/sistem (hanya pada lebar desktop).
+- **Grid sequence tampil utuh di desktop 1280.** Lebar minimum sequence disesuaikan agar seluruh 16 step terlihat tanpa scroll horizontal pada lebar desktop utama; editor piano inline ikut menyesuaikan agar tetap muat.
+- **Penanda 4-beat lebih terbaca.** Latar step per-empat-beat dibuat lebih jelas dan angka 1/5/9/13 pada header memakai kontras lebih tinggi, tanpa mengubah warna on/off.
+- **State terpilih lebih jelas.** Row track terpilih dan row mixer terpilih memakai bar aksen yang lebih tegas, dan nama track terpilih sedikit lebih berat — tetap memakai warna role yang sudah ada, bukan palet baru.
+- **Ritme sidebar dan status.** Tab aktif kini punya garis bawah aksen dan tab non-aktif lebih redup, sehingga panel aktif langsung terbaca. Blok hint pembuka, status bar, dan footer dirapatkan sedikit agar sequencer naik.
+- Invariant tetap: **algoritma musik, native/LLM generator, fill gaps, transport BPM, audio scheduler, WAV/MIDI, project/share/export schema, LocalExecutor, AI schema/provider/key, typed operations, dan semantics direct-pattern tetap tidak disentuh.** `APP_VERSION` di-bump ke **4.12.0**; project schema tetap **5**.
+
 ### Perbaikan 4.11.3 (friction workflow komposisi)
 
 Correction pass kecil setelah audit *Actual Composition Workflow*. Bukan redesign dan bukan penambahan kemampuan musik: hanya empat friction yang paling terasa saat benar-benar membuat komposisi. Tanpa subsystem baru dan tanpa perubahan schema/audio/generator.
@@ -275,4 +286,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.11.3**.
+Versi saat ini: **4.12.0**.
