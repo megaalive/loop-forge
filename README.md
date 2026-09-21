@@ -34,6 +34,17 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 ## Riwayat perubahan (terbaru dulu)
 
+### Perbaikan 4.11.3 (friction workflow komposisi)
+
+Correction pass kecil setelah audit *Actual Composition Workflow*. Bukan redesign dan bukan penambahan kemampuan musik: hanya empat friction yang paling terasa saat benar-benar membuat komposisi. Tanpa subsystem baru dan tanpa perubahan schema/audio/generator.
+
+- **Part manual tersedia di Easy.** `Copy → next` tidak lagi `advanced-only`, jadi user yang menyusun Part A secara manual bisa menjadikannya titik awal Part B tanpa mencari **More**. Handler yang dipakai sama (checkpoint `Copy pattern` → clone current part → pindah ke part berikutnya), tanpa tombol kedua dan tanpa auto-copy.
+- **Label copy dinamis dan jelas.** Tombol menampilkan tujuan sebenarnya dan ikut berubah saat part aktif berganti: `Copy A → B`, `Copy B → C`, `Copy C → D`, `Copy D → A` (wrap tetap seperti sebelumnya). Diperbarui lewat satu helper `syncCopyLabel()` yang dipanggil dari `renderAll()`.
+- **Pindah ke part kosong tidak lagi terasa seperti karya hilang.** Hanya pada **peralihan yang dimulai user** (`switchPattern(..., {user:true})`) ke part yang benar-benar kosong saat part aktif berisi musik, muncul toast ringkas `Part B is empty · part A is unchanged`. Switch internal (playback, `Play all`, chain, Generator, copy) tidak memberi toast ini; switch ke part berisi musik juga tidak. "Kosong" diukur dari konten musikal nyata (step velocity / `noteEvents`), bukan setelan mixer/Sound.
+- **Mix mempertahankan identitas track.** Row mixer untuk track yang sedang dipilih kini di-highlight (bar aksen + latar, memakai bahasa visual yang sudah ada), dan menyentuh sebuah row — termasuk volume/pan/mute/solo — menjadikannya track terpilih. Memakai satu `selectedTrack` yang sama (tanpa state mixer kedua); membuka **Sound** lalu menampilkan track yang tadi dipilih. Slider memakai helper `selectTrackLight()` yang hanya mengganti styling terpilih, jadi drag volume/pan tidak memicu `renderAll()` (perilaku checkpoint-per-gesture, live volume/pan, mute/solo, dan meter tetap).
+- **Inline note editor lebih ramah saat dibuka.** Saat editor dibuka untuk track yang posisinya membuatnya jatuh di bawah fold, editor digeser masuk ke area pandang dengan `scrollIntoView({block:'nearest'})` — minimal, tidak memaksa ke atas, dan tidak mengubah posisi scroll horizontal sequence. Area scroll piano kini juga punya scrollbar tipis bertema, konsisten dengan dialog Generator. Semantik note, rentang 16 pitch, dan tinggi editor tidak berubah.
+- Invariant tetap: **algoritma musik, native/LLM generator, fill gaps, transport BPM, audio scheduler, WAV/MIDI, project/share/export schema, LocalExecutor, AI schema/provider/key, typed operations, dan semantics direct-pattern tetap tidak disentuh.** `APP_VERSION` di-bump ke **4.11.3**; project schema tetap **5**.
+
 ### Perbaikan 4.11.2 (UX sanity non-generator)
 
 Correction pass setelah Generator v4.11.1 stabil. Fokusnya masalah UX nyata di luar Generator: kontrol terlihat harus benar-benar berpengaruh, dan state tersembunyi tidak boleh membuat user terjebak. Tanpa redesign dan tanpa perubahan audio/Generator/schema.
@@ -264,4 +275,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.11.2**.
+Versi saat ini: **4.11.3**.
