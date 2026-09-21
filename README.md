@@ -34,6 +34,12 @@ Loop Forge sengaja dibuat sederhana: satu file HTML, tanpa framework, tanpa pros
 
 ## Riwayat perubahan (terbaru dulu)
 
+### Perbaikan 4.12.1
+
+- Memuat ulang atau mengganti file audio pada track Sample yang sudah ada kini mempertahankan mode Whole/Slice, assignment slice per-step, dan state musikal track.
+- Track non-Sample yang pertama kali diubah menjadi Sample tetap memulai dengan mode Whole.
+- Audio sample tetap berupa file eksternal; project dan autosave tidak menyimpan byte audio.
+
 ### Baru di 4.12.0 — visual polish
 
 Polish visual tanpa redesign: alur kerja, mental model, dan kecepatan tetap sama, hanya hierarki dan ritme yang dirapikan. Tanpa framework, fitur, atau design language baru; tanpa perubahan audio, generator, data project, atau schema.
@@ -286,4 +292,4 @@ Fokus proyek ini adalah workflow yang mudah dipahami, ukuran kecil, dan fitur ya
 
 ## Status
 
-Versi saat ini: **4.12.0**.
+Versi saat ini: **4.12.1**.
